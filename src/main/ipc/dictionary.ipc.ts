@@ -100,6 +100,24 @@ export function registerDictionaryHandlers(repos: RepositoryRegistry): void {
     return { success: true }
   })
 
+  ipcMain.handle('dictionary:deleteByFilter', (_event, filters: DictionaryFilters) =>
+    repos.dictionary.deleteByFilter(filters)
+  )
+
+  ipcMain.handle(
+    'dictionary:replaceByFilter',
+    (
+      _event,
+      {
+        filters,
+        patch
+      }: {
+        filters: DictionaryFilters
+        patch: { findText: string; replaceText: string; column: 'language1' | 'language2' }
+      }
+    ) => repos.dictionary.updateTextByFilter(filters, patch)
+  )
+
   ipcMain.handle(
     'dictionary:similar',
     (

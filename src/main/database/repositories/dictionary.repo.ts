@@ -296,6 +296,50 @@ export class DictionaryRepository {
     this.db.delete(dictionary).where(eq(dictionary.id, id)).run()
   }
 
+  deleteByFilter(filters: DictionaryFilters): { deleted: number } {
+    const where = this.buildFilterWhere(filters)
+    const result = (
+      where ? this.db.delete(dictionary).where(where) : this.db.delete(dictionary)
+    ).run() as { changes: number }
+    return { deleted: result.changes }
+  }
+
+  updateTextByFilter(
+    filters: DictionaryFilters,
+    patch: { findText: string; replaceText: string; column: 'language1' | 'language2' }
+  ): { updated: number } {
+    const { sourceLang, targetLang } = filters
+    let swapped = false
+    if (sourceLang && targetLang) {
+      ;[, , swapped] = normalizeLangs(sourceLang, targetLang)
+    }
+
+    // user's 'language1' (source) -> textLanguage1 when not swapped, textLanguage2 when swapped
+    const useL1 = (patch.column === 'language1') !== swapped
+    const filterWhere = this.buildFilterWhere(filters)
+    const { findText, replaceText } = patch
+
+    if (useL1) {
+      const likeWhere = sql`${dictionary.textLanguage1} like ${`%${findText}%`}`
+      const finalWhere = filterWhere ? (and(filterWhere, likeWhere) as SQL) : likeWhere
+      const result = this.db
+        .update(dictionary)
+        .set({ textLanguage1: sql`replace(${dictionary.textLanguage1}, ${findText}, ${replaceText})` })
+        .where(finalWhere)
+        .run() as { changes: number }
+      return { updated: result.changes }
+    }
+
+    const likeWhere = sql`${dictionary.textLanguage2} like ${`%${findText}%`}`
+    const finalWhere = filterWhere ? (and(filterWhere, likeWhere) as SQL) : likeWhere
+    const result = this.db
+      .update(dictionary)
+      .set({ textLanguage2: sql`replace(${dictionary.textLanguage2}, ${findText}, ${replaceText})` })
+      .where(finalWhere)
+      .run() as { changes: number }
+    return { updated: result.changes }
+  }
+
   private queryList(filters: DictionaryFilters) {
     const where = this.buildFilterWhere(filters)
     const query = this.db.select().from(dictionary)
