@@ -40,7 +40,11 @@
   },
   "selection": {
     "none": "No selection",
-    "count": "{{count}} selected"
+    "count": "{{count}} selected",
+    "pageSelected": "Selected the {{pageSize}} rows on this page.",
+    "selectAllMatching": "Select all {{total}} matching",
+    "allMatchingSelected": "All {{total}} matching rows selected.",
+    "clear": "Clear selection"
   },
   "actions": {
     "exportCsv": "Export CSV",

@@ -43,6 +43,7 @@ interface PendingDeleteState {
   ids: number[]
   title: string
   description: string
+  filterBased?: boolean
 }
 
 interface FilterOption {
@@ -88,6 +89,7 @@ export function DictionaryPage(): React.JSX.Element {
   const [sourceLang, setSourceLang] = useState('')
   const [targetLang, setTargetLang] = useState('')
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [selectionScope, setSelectionScope] = useState<'page' | 'all-filtered'>('page')
   const [importOpen, setImportOpen] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [replaceOpen, setReplaceOpen] = useState(false)
@@ -168,6 +170,7 @@ export function DictionaryPage(): React.JSX.Element {
   useEffect(() => {
     setPage(1)
     setSelectedIds(new Set())
+    setSelectionScope('page')
   }, [filters])
 
   useEffect(() => {
@@ -272,7 +275,7 @@ export function DictionaryPage(): React.JSX.Element {
   const allFilteredSelected =
     displayEntries.length > 0 && displayEntries.every((entry) => selectedIds.has(entry.id))
   const hasFilters = Boolean(text || modName || sourceLang || targetLang)
-  const selectedCount = selectedIds.size
+  const selectedCount = selectionScope === 'all-filtered' ? result.total : selectedIds.size
   const pageStart = result.total === 0 ? 0 : (result.page - 1) * result.pageSize + 1
   const pageEnd = result.total === 0 ? 0 : pageStart + displayEntries.length - 1
 
@@ -356,7 +359,55 @@ export function DictionaryPage(): React.JSX.Element {
     }
   }
 
+  const handleDeleteByFilter = async () => {
+    try {
+      const { deleted } = await window.api.dictionary.deleteByFilter(filters)
+      toast.success(
+        t(deleted === 1 ? 'dictionary.deleted_one' : 'dictionary.deleted_other', {
+          ns: 'toasts',
+          count: deleted
+        })
+      )
+      setPendingDelete(null)
+      setSelectedIds(new Set())
+      setSelectionScope('page')
+      await refreshCurrentPage()
+    } catch (error) {
+      toast.error(getLocalizedErrorMessage(error, t))
+    }
+  }
+
   const handleBatchReplace = async (draft: ReplaceDraft): Promise<boolean> => {
+    if (selectionScope === 'all-filtered') {
+      try {
+        let updated = 0
+        const columns: Array<'language1' | 'language2'> = []
+        if (draft.scope === 'source' || draft.scope === 'both') columns.push('language1')
+        if (draft.scope === 'target' || draft.scope === 'both') columns.push('language2')
+        for (const column of columns) {
+          const res = await window.api.dictionary.replaceByFilter(filters, {
+            findText: draft.find,
+            replaceText: draft.replaceWith,
+            column
+          })
+          updated += res.updated
+        }
+        if (updated === 0) {
+          toast.info(t('dictionary.replaceNone', { ns: 'toasts' }))
+          return false
+        }
+        toast.success(t('dictionary.replaceApplied', { ns: 'toasts', count: updated }))
+        setReplaceOpen(false)
+        setSelectionScope('page')
+        setSelectedIds(new Set())
+        await Promise.all([refreshCurrentPage(), loadReferenceData()])
+        return true
+      } catch (error) {
+        toast.error(getLocalizedErrorMessage(error, t))
+        return false
+      }
+    }
+
     const selectedEntries = displayEntries.filter((entry) => selectedIds.has(entry.id))
     const updates = selectedEntries
       .map((entry) => {
@@ -436,6 +487,7 @@ export function DictionaryPage(): React.JSX.Element {
   }
 
   const toggleSelected = (id: number, checked: boolean) => {
+    if (selectionScope === 'all-filtered') setSelectionScope('page')
     setSelectedIds((previous) => {
       const next = new Set(previous)
       if (checked) next.add(id)
@@ -581,14 +633,26 @@ export function DictionaryPage(): React.JSX.Element {
             type="button"
             disabled={selectedCount === 0}
             onClick={() =>
-              setPendingDelete({
-                ids: Array.from(selectedIds),
-                title: t('dialogs.deleteSelectionTitle', { ns: 'dictionary' }),
-                description: t('dialogs.deleteSelectionDescription', {
-                  ns: 'dictionary',
-                  count: selectedCount
-                })
-              })
+              setPendingDelete(
+                selectionScope === 'all-filtered'
+                  ? {
+                      ids: [],
+                      filterBased: true,
+                      title: t('dialogs.deleteSelectionTitle', { ns: 'dictionary' }),
+                      description: t('dialogs.deleteSelectionDescription', {
+                        ns: 'dictionary',
+                        count: result.total
+                      })
+                    }
+                  : {
+                      ids: Array.from(selectedIds),
+                      title: t('dialogs.deleteSelectionTitle', { ns: 'dictionary' }),
+                      description: t('dialogs.deleteSelectionDescription', {
+                        ns: 'dictionary',
+                        count: selectedCount
+                      })
+                    }
+              )
             }
             className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-red-500/30 bg-red-500/8 px-3 text-xs font-medium text-red-200 transition-colors hover:bg-red-500/14 disabled:cursor-not-allowed disabled:border-[#252a32] disabled:bg-[#131518] disabled:text-neutral-500"
           >
@@ -676,6 +740,51 @@ export function DictionaryPage(): React.JSX.Element {
                 </th>
               </tr>
             </thead>
+            {selectionScope === 'page' &&
+              allFilteredSelected &&
+              result.total > result.pageSize && (
+                <tbody>
+                  <tr>
+                    <td
+                      colSpan={7}
+                      className="border-b border-[#1f2329] bg-amber-500/8 px-4 py-2 text-xs text-amber-300"
+                    >
+                      {t('selection.pageSelected', { ns: 'dictionary', pageSize: displayEntries.length })}
+                      {' '}
+                      <button
+                        type="button"
+                        className="font-semibold underline hover:text-amber-200"
+                        onClick={() => setSelectionScope('all-filtered')}
+                      >
+                        {t('selection.selectAllMatching', { ns: 'dictionary', total: result.total })}
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              )}
+            {selectionScope === 'all-filtered' && (
+              <tbody>
+                <tr>
+                  <td
+                    colSpan={7}
+                    className="border-b border-[#1f2329] bg-blue-500/8 px-4 py-2 text-xs text-blue-300"
+                  >
+                    {t('selection.allMatchingSelected', { ns: 'dictionary', total: result.total })}
+                    {' '}
+                    <button
+                      type="button"
+                      className="font-semibold underline hover:text-blue-200"
+                      onClick={() => {
+                        setSelectionScope('page')
+                        setSelectedIds(new Set())
+                      }}
+                    >
+                      {t('selection.clear', { ns: 'dictionary' })}
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            )}
             <tbody>
               {displayEntries.map((entry) => (
                 <tr
@@ -870,7 +979,8 @@ export function DictionaryPage(): React.JSX.Element {
         destructive
         onClose={() => setPendingDelete(null)}
         onConfirm={() => {
-          if (pendingDelete) void handleDeleteMany(pendingDelete.ids)
+          if (pendingDelete?.filterBased) void handleDeleteByFilter()
+          else if (pendingDelete) void handleDeleteMany(pendingDelete.ids)
         }}
       />
 
