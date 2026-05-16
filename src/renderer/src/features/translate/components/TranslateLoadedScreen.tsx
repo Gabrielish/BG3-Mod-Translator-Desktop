@@ -83,7 +83,7 @@ export function TranslateLoadedScreen({ session }: TranslateLoadedScreenProps): 
       </div>
 
       <BatchActionBar
-        selectedCount={session.selectedUids.size}
+        selectedCount={session.selectedCount}
         batchCompleted={batch.batchCompleted}
         batchTotal={batch.batchTotal}
         onTranslateDeepL={() => batch.batchTranslate('deepl')}

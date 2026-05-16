@@ -10,7 +10,9 @@ import {
 } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
+  type FilterSpec,
   type TranslationSessionEntry,
+  materializeSelectedEntries,
   useTranslationSession
 } from '@/context/TranslationSession'
 import { HighlightedTextarea } from '@/components/shared/HighlightedTextarea'
@@ -71,8 +73,9 @@ export function TranslationGrid({
   viewMode
 }: TranslationGridProps): React.JSX.Element {
   const { t } = useAppTranslation(['translate', 'common'])
-  const { selectedUids, selectEntry, selectEntries, sourceLang, targetLang } =
-    useTranslationSession()
+  const session = useTranslationSession()
+  const { selection, isSelected, selectAllMatching, toggleEntry, clearSelection, sourceLang, targetLang } =
+    session
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<FilterMode>('all')
   const deferredSearch = useDeferredValue(search)
@@ -122,6 +125,14 @@ export function TranslationGrid({
     setCurrentPage(1)
   }, [deferredFilter, deferredSearch, entries])
 
+  // clear selection when filter or search changes so count never disagrees with checkbox
+  useEffect(() => {
+    clearSelection()
+  }, [deferredFilter, deferredSearch, clearSelection])
+
+  // single source of truth for which entries "select-all" covers
+  const currentFilter: FilterSpec = { mode: deferredFilter, search: deferredSearch }
+
   const totalPages = Math.max(1, Math.ceil(filteredEntries.length / pageSize))
   const pageEntries = filteredEntries.slice((currentPage - 1) * pageSize, currentPage * pageSize)
 
@@ -140,20 +151,18 @@ export function TranslationGrid({
   })
 
   const selectedStats = useMemo(() => {
-    let selectedStrings = 0
-    let selectedCharacters = 0
-
-    for (const entry of entries) {
-      if (!selectedUids.has(entry.rowId)) continue
-      selectedStrings += 1
-      selectedCharacters += entry.source.length
+    const materialized = materializeSelectedEntries(session)
+    return {
+      selectedStrings: materialized.length,
+      selectedCharacters: materialized.reduce((sum, e) => sum + e.source.length, 0)
     }
-
-    return { selectedStrings, selectedCharacters }
-  }, [entries, selectedUids])
+  }, [session.selection, session.entries])
 
   const allFiltered =
-    filteredEntries.length > 0 && filteredEntries.every((entry) => selectedUids.has(entry.rowId))
+    selection.kind === 'all-matching' &&
+    selection.excluded.size === 0 &&
+    selection.filter.mode === deferredFilter &&
+    selection.filter.search === deferredSearch
 
   useEffect(() => {
     const handleFindShortcut = (event: KeyboardEvent) => {
@@ -169,10 +178,11 @@ export function TranslationGrid({
   }, [])
 
   const handleSelectAll = (checked: boolean) => {
-    selectEntries(
-      filteredEntries.map((entry) => entry.rowId),
-      checked
-    )
+    if (checked) {
+      selectAllMatching(currentFilter)
+    } else {
+      clearSelection()
+    }
   }
 
   const focusEntry = (rowId: string) => {
@@ -444,7 +454,7 @@ export function TranslationGrid({
               const entry = pageEntries[virtualItem.index]
               const category = getCategory(entry)
               const isDone = entry.target.trim() !== ''
-              const isSelected = selectedUids.has(entry.rowId)
+              const isRowSelected = isSelected(entry.rowId)
               const isDictionary = category === 'dictionary'
               const charCount = entry.source.length
               const globalIndex = (currentPage - 1) * pageSize + virtualItem.index
@@ -456,7 +466,7 @@ export function TranslationGrid({
                   ref={sideVirtualizer.measureElement}
                   className={cn(
                     'group grid border-b border-[#1f2329] transition-colors hover:bg-[#131518]/60 focus-within:bg-[#131518] focus-within:shadow-[inset_3px_0_0_#f59e0b]',
-                    isSelected && 'bg-blue-950/10'
+                    isRowSelected && 'bg-blue-950/10'
                   )}
                   style={{
                     position: 'absolute',
@@ -473,8 +483,8 @@ export function TranslationGrid({
                   >
                     <input
                       type="checkbox"
-                      checked={isSelected}
-                      onChange={(event) => selectEntry(entry.rowId, event.target.checked)}
+                      checked={isRowSelected}
+                      onChange={() => toggleEntry(entry.rowId)}
                       onClick={(event) => event.stopPropagation()}
                       className="cursor-pointer accent-amber-500"
                     />
@@ -586,7 +596,7 @@ export function TranslationGrid({
             const entry = pageEntries[virtualItem.index]
             const category = getCategory(entry)
             const isDone = entry.target.trim() !== ''
-            const isSelected = selectedUids.has(entry.rowId)
+            const isRowSelected = isSelected(entry.rowId)
             const isDictionary = category === 'dictionary'
             const hasTags = hasXmlTags(entry)
             const wordCount = entry.source.split(/\s+/).filter(Boolean).length
@@ -618,7 +628,7 @@ export function TranslationGrid({
                       'border-[#1f2329] bg-[#0f1114]',
                       'hover:-translate-y-px hover:border-[#2a2f37] hover:shadow-[0_4px_16px_rgba(0,0,0,0.18)]',
                       'focus-within:border-amber-500 focus-within:shadow-[0_0_0_3px_rgba(245,158,11,0.25),0_8px_24px_rgba(0,0,0,0.24)]',
-                      isSelected && 'border-blue-700/40 bg-blue-950/10'
+                      isRowSelected && 'border-blue-700/40 bg-blue-950/10'
                     )}
                     style={{ gridTemplateColumns: '56px 1fr' }}
                     onClick={() => focusEntry(entry.rowId)}
@@ -626,8 +636,8 @@ export function TranslationGrid({
                     <div className="flex flex-col items-center gap-3 border-r border-[#1f2329] bg-[#0c0d0f] py-4.5">
                       <input
                         type="checkbox"
-                        checked={isSelected}
-                        onChange={(event) => selectEntry(entry.rowId, event.target.checked)}
+                        checked={isRowSelected}
+                        onChange={() => toggleEntry(entry.rowId)}
                         onClick={(event) => event.stopPropagation()}
                         className="cursor-pointer accent-amber-500"
                       />

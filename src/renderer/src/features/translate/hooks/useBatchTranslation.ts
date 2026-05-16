@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
+import { materializeSelectedEntries } from '@/context/TranslationSession'
 import { getLocalizedErrorMessage } from '@/i18n/errors'
 import { useAppTranslation } from '@/i18n/useAppTranslation'
 import type {
@@ -19,8 +20,7 @@ export function useBatchTranslation(session: TranslationSession) {
   const activeJobIdRef = useRef<string | null>(null)
   const pendingUidsRef = useRef<Set<string>>(new Set())
   const batchErrorsRef = useRef<Map<string, string>>(new Map())
-  const { entries, selectedUids, sourceLang, targetLang, updateEntry, clearSelection, selectEntries } =
-    session
+  const { entries, sourceLang, targetLang, updateEntry, clearSelection, selectEntries } = session
 
   const clearListeners = useCallback(() => {
     batchCleanupRef.current?.()
@@ -59,9 +59,10 @@ export function useBatchTranslation(session: TranslationSession) {
     async (provider: 'openai' | 'deepl') => {
       if (isBatchTranslating) return
 
-      const selectedEntries = entries
-        .filter((entry) => selectedUids.has(entry.rowId))
-        .map((entry) => ({ uid: entry.rowId, source: entry.source }))
+      const selectedEntries = materializeSelectedEntries(session).map((entry) => ({
+        uid: entry.rowId,
+        source: entry.source
+      }))
 
       if (selectedEntries.length === 0) {
         toast.info(t('batchBar.noSelection', { ns: 'translate' }))
@@ -207,7 +208,7 @@ export function useBatchTranslation(session: TranslationSession) {
       finishBatchJob,
       isBatchTranslating,
       restorePendingSelection,
-      selectedUids,
+      session,
       sourceLang,
       targetLang,
       updateEntry
