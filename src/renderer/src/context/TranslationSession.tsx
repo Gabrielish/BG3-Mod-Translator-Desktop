@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useReducer } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer } from 'react'
 import { i18n } from '@/i18n'
 import type { XmlEntry } from '@/types'
 
@@ -8,24 +8,73 @@ export interface TranslationSessionEntry extends XmlEntry {
 
 type Phase = 'idle' | 'loading' | 'loaded'
 
-interface State {
+export type FilterMode = 'all' | 'untranslated' | 'translated' | 'dictionary' | 'tags'
+export interface FilterSpec {
+  mode: FilterMode
+  search: string
+}
+export type SelectionState =
+  | { kind: 'explicit'; uids: Set<string> }
+  | { kind: 'all-matching'; filter: FilterSpec; excluded: Set<string> }
+
+// private helpers - mirror predicates from TranslationGrid so entryMatchesFilter stays pure
+function getCategory(entry: TranslationSessionEntry): 'dictionary' | 'tool' | 'manual' | 'none' {
+  if (entry.matchType === 'mod-text' || entry.matchType === 'text') return 'dictionary'
+  if (entry.matchType === 'manual') return 'manual'
+  if (entry.target.trim()) return 'tool'
+  return 'none'
+}
+
+function hasXmlTags(entry: TranslationSessionEntry): boolean {
+  return /(<[^>]+>|\{[^}]+\})/.test(entry.source)
+}
+
+export function entryMatchesFilter(entry: TranslationSessionEntry, filter: FilterSpec): boolean {
+  if (filter.mode === 'untranslated' && entry.target.trim()) return false
+  if (filter.mode === 'translated' && !entry.target.trim()) return false
+  if (filter.mode === 'dictionary' && getCategory(entry) !== 'dictionary') return false
+  if (filter.mode === 'tags' && !hasXmlTags(entry)) return false
+  if (filter.search) {
+    const query = filter.search.toLowerCase()
+    return (
+      entry.source.toLowerCase().includes(query) || entry.target.toLowerCase().includes(query)
+    )
+  }
+  return true
+}
+
+export interface TranslationSessionState {
   phase: Phase
   loadingLabel: string
   entries: TranslationSessionEntry[]
-  selectedUids: Set<string>
+  selection: SelectionState
   modName: string
   sourceLang: string
   targetLang: string
   inputPath: string | null
 }
 
+export function materializeSelectedEntries(
+  state: TranslationSessionState
+): TranslationSessionEntry[] {
+  const { selection, entries } = state
+  if (selection.kind === 'explicit') {
+    return entries.filter((e) => selection.uids.has(e.rowId))
+  }
+  return entries.filter(
+    (e) => entryMatchesFilter(e, selection.filter) && !selection.excluded.has(e.rowId)
+  )
+}
+
+const EMPTY_EXPLICIT: SelectionState = { kind: 'explicit', uids: new Set() }
+
 type Action =
   | { type: 'SET_PHASE'; phase: Phase; loadingLabel?: string }
   | { type: 'SET_ENTRIES'; entries: TranslationSessionEntry[] }
   | { type: 'UPDATE_ENTRY'; rowId: string; target: string }
   | { type: 'MARK_MANUAL'; rowId: string }
-  | { type: 'SELECT_ENTRY'; rowId: string; selected: boolean }
-  | { type: 'SELECT_ENTRIES'; rowIds: string[]; selected: boolean }
+  | { type: 'SELECT_ALL_MATCHING'; filter: FilterSpec }
+  | { type: 'TOGGLE_ENTRY'; rowId: string }
   | { type: 'CLEAR_SELECTION' }
   | { type: 'SET_MOD_NAME'; name: string }
   | { type: 'SET_SOURCE_LANG'; lang: string }
@@ -33,7 +82,7 @@ type Action =
   | { type: 'SET_INPUT_PATH'; path: string }
   | { type: 'RESET' }
 
-function reducer(state: State, action: Action): State {
+function reducer(state: TranslationSessionState, action: Action): TranslationSessionState {
   switch (action.type) {
     case 'SET_PHASE':
       return {
@@ -45,7 +94,7 @@ function reducer(state: State, action: Action): State {
       return {
         ...state,
         entries: action.entries,
-        selectedUids: new Set<string>(),
+        selection: EMPTY_EXPLICIT,
         phase: 'loaded',
         loadingLabel: ''
       }
@@ -63,22 +112,27 @@ function reducer(state: State, action: Action): State {
           e.rowId === action.rowId ? { ...e, matchType: 'manual' } : e
         )
       }
-    case 'SELECT_ENTRY': {
-      const selectedUids = new Set(state.selectedUids)
-      if (action.selected) selectedUids.add(action.rowId)
-      else selectedUids.delete(action.rowId)
-      return { ...state, selectedUids }
-    }
-    case 'SELECT_ENTRIES': {
-      const selectedUids = new Set(state.selectedUids)
-      for (const rowId of action.rowIds) {
-        if (action.selected) selectedUids.add(rowId)
-        else selectedUids.delete(rowId)
+    case 'SELECT_ALL_MATCHING':
+      return {
+        ...state,
+        selection: { kind: 'all-matching', filter: action.filter, excluded: new Set() }
       }
-      return { ...state, selectedUids }
+    case 'TOGGLE_ENTRY': {
+      const { selection } = state
+      if (selection.kind === 'explicit') {
+        const uids = new Set(selection.uids)
+        if (uids.has(action.rowId)) uids.delete(action.rowId)
+        else uids.add(action.rowId)
+        return { ...state, selection: { kind: 'explicit', uids } }
+      }
+      // all-matching: toggle exclusion (excluded = visually unchecked)
+      const excluded = new Set(selection.excluded)
+      if (excluded.has(action.rowId)) excluded.delete(action.rowId)
+      else excluded.add(action.rowId)
+      return { ...state, selection: { ...selection, excluded } }
     }
     case 'CLEAR_SELECTION':
-      return { ...state, selectedUids: new Set<string>() }
+      return { ...state, selection: EMPTY_EXPLICIT }
     case 'SET_MOD_NAME':
       return { ...state, modName: action.name }
     case 'SET_SOURCE_LANG':
@@ -93,7 +147,7 @@ function reducer(state: State, action: Action): State {
         phase: 'idle',
         loadingLabel: '',
         entries: [],
-        selectedUids: new Set<string>(),
+        selection: EMPTY_EXPLICIT,
         inputPath: null
       }
     default:
@@ -101,7 +155,21 @@ function reducer(state: State, action: Action): State {
   }
 }
 
-interface TranslationSessionContext extends State {
+interface TranslationSessionContext extends TranslationSessionState {
+  // new selection API
+  selectAllMatching: (filter: FilterSpec) => void
+  toggleEntry: (rowId: string) => void
+  clearSelection: () => void
+  isSelected: (rowId: string) => boolean
+  selectedCount: number
+  // compat shims - replaced in task 05
+  /** @deprecated use isSelected */
+  selectedUids: Set<string>
+  /** @deprecated use toggleEntry */
+  selectEntry: (rowId: string, selected: boolean) => void
+  /** @deprecated use selectAllMatching */
+  selectEntries: (rowIds: string[], selected: boolean) => void
+  // other
   loadSession: (
     inputPath: string,
     sourceLang: string,
@@ -111,9 +179,6 @@ interface TranslationSessionContext extends State {
   ) => Promise<void>
   updateEntry: (rowId: string, target: string) => void
   markManual: (rowId: string) => void
-  selectEntry: (rowId: string, selected: boolean) => void
-  selectEntries: (rowIds: string[], selected: boolean) => void
-  clearSelection: () => void
   setModName: (name: string) => void
   setSourceLang: (lang: string) => void
   setTargetLang: (lang: string) => void
@@ -134,7 +199,7 @@ export function TranslationSessionProvider({
     phase: 'idle',
     loadingLabel: '',
     entries: [],
-    selectedUids: new Set<string>(),
+    selection: EMPTY_EXPLICIT,
     modName: '',
     sourceLang: DEFAULT_SOURCE,
     targetLang: DEFAULT_TARGET,
@@ -205,17 +270,71 @@ export function TranslationSessionProvider({
     dispatch({ type: 'MARK_MANUAL', rowId })
   }, [])
 
-  const selectEntry = useCallback((rowId: string, selected: boolean) => {
-    dispatch({ type: 'SELECT_ENTRY', rowId, selected })
+  const selectAllMatching = useCallback((filter: FilterSpec) => {
+    dispatch({ type: 'SELECT_ALL_MATCHING', filter })
   }, [])
 
-  const selectEntries = useCallback((rowIds: string[], selected: boolean) => {
-    dispatch({ type: 'SELECT_ENTRIES', rowIds, selected })
+  const toggleEntry = useCallback((rowId: string) => {
+    dispatch({ type: 'TOGGLE_ENTRY', rowId })
   }, [])
 
   const clearSelection = useCallback(() => {
     dispatch({ type: 'CLEAR_SELECTION' })
   }, [])
+
+  const isSelected = useCallback(
+    (rowId: string): boolean => {
+      const { selection, entries } = state
+      if (selection.kind === 'explicit') return selection.uids.has(rowId)
+      const entry = entries.find((e) => e.rowId === rowId)
+      if (!entry) return false
+      return entryMatchesFilter(entry, selection.filter) && !selection.excluded.has(rowId)
+    },
+    [state]
+  )
+
+  const selectedCount = useMemo(() => {
+    const { selection, entries } = state
+    if (selection.kind === 'explicit') return selection.uids.size
+    let count = 0
+    for (const entry of entries) {
+      if (entryMatchesFilter(entry, selection.filter) && !selection.excluded.has(entry.rowId)) {
+        count++
+      }
+    }
+    return count
+  }, [state])
+
+  // compat shim: materializes Set<string> for legacy consumers (task 05 removes)
+  const selectedUids = useMemo(() => {
+    const { selection, entries } = state
+    if (selection.kind === 'explicit') return selection.uids
+    const result = new Set<string>()
+    for (const entry of entries) {
+      if (entryMatchesFilter(entry, selection.filter) && !selection.excluded.has(entry.rowId)) {
+        result.add(entry.rowId)
+      }
+    }
+    return result
+  }, [state])
+
+  // compat shim: maps old per-row select to toggleEntry (task 05 removes)
+  const selectEntry = useCallback(
+    (rowId: string, selected: boolean) => {
+      if (isSelected(rowId) !== selected) dispatch({ type: 'TOGGLE_ENTRY', rowId })
+    },
+    [isSelected]
+  )
+
+  // compat shim: maps old bulk select to individual toggles (task 05 removes)
+  const selectEntries = useCallback(
+    (rowIds: string[], selected: boolean) => {
+      for (const rowId of rowIds) {
+        if (isSelected(rowId) !== selected) dispatch({ type: 'TOGGLE_ENTRY', rowId })
+      }
+    },
+    [isSelected]
+  )
 
   const setModName = useCallback((name: string) => {
     dispatch({ type: 'SET_MOD_NAME', name })
@@ -237,12 +356,17 @@ export function TranslationSessionProvider({
     <Context.Provider
       value={{
         ...state,
+        selectAllMatching,
+        toggleEntry,
+        clearSelection,
+        isSelected,
+        selectedCount,
+        selectedUids,
+        selectEntry,
+        selectEntries,
         loadSession,
         updateEntry,
         markManual,
-        selectEntry,
-        selectEntries,
-        clearSelection,
         setModName,
         setSourceLang,
         setTargetLang,
