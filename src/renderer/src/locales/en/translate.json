@@ -77,7 +77,15 @@
     "containsTags": "contains tags",
     "dictionarySuggestion": "Dictionary suggests:",
     "dictionaryTagMod": "1 term (mod)",
-    "dictionaryTag": "1 term"
+    "dictionaryTag": "1 term",
+    "pagination": {
+      "pageSizeLabel": "Rows per page",
+      "pageOf": "Page {{current}} of {{total}}",
+      "first": "First",
+      "prev": "Previous",
+      "next": "Next",
+      "last": "Last"
+    }
   },
   "batchBar": {
     "selectedCount_one": "{{count}} entry selected",

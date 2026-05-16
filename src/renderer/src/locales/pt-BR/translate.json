@@ -77,7 +77,15 @@
     "containsTags": "contém tags",
     "dictionarySuggestion": "Dicionário sugere:",
     "dictionaryTagMod": "1 termo (mod)",
-    "dictionaryTag": "1 termo"
+    "dictionaryTag": "1 termo",
+    "pagination": {
+      "pageSizeLabel": "Linhas por página",
+      "pageOf": "Página {{current}} de {{total}}",
+      "first": "Primeira",
+      "prev": "Anterior",
+      "next": "Próxima",
+      "last": "Última"
+    }
   },
   "batchBar": {
     "selectedCount_one": "{{count}} entrada selecionada",

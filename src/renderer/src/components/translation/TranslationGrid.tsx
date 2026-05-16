@@ -77,6 +77,8 @@ export function TranslationGrid({
   const deferredSearch = useDeferredValue(search)
   const deferredFilter = useDeferredValue(filter)
   const [isPending, startFilterTransition] = useTransition()
+  const [pageSize, setPageSize] = useState<100 | 250 | 500 | 1000>(250)
+  const [currentPage, setCurrentPage] = useState(1)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const textareaRefs = useRef<Map<string, HTMLTextAreaElement>>(new Map())
   const savedByEnterRef = useRef<Set<string>>(new Set())
@@ -112,6 +114,13 @@ export function TranslationGrid({
       return true
     })
   }, [deferredFilter, deferredSearch, entries])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [deferredFilter, deferredSearch, entries])
+
+  const totalPages = Math.max(1, Math.ceil(filteredEntries.length / pageSize))
+  const pageEntries = filteredEntries.slice((currentPage - 1) * pageSize, currentPage * pageSize)
 
   const selectedStats = useMemo(() => {
     let selectedStrings = 0
@@ -181,8 +190,8 @@ export function TranslationGrid({
 
     if (value.trim()) onEntrySave(entry.rowId, value)
 
-    const nextIndex = filteredEntries.findIndex((item) => item.rowId === entry.rowId) + 1
-    const nextEntry = filteredEntries[nextIndex]
+    const nextIndex = pageEntries.findIndex((item) => item.rowId === entry.rowId) + 1
+    const nextEntry = pageEntries[nextIndex]
     if (!nextEntry) return
 
     const nextTextarea = textareaRefs.current.get(nextEntry.rowId)
@@ -190,6 +199,75 @@ export function TranslationGrid({
     nextTextarea.focus()
     nextTextarea.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   }
+
+  const btnBase =
+    'inline-flex h-7 cursor-pointer items-center rounded border border-[#1f2329] bg-[#131518] px-2 text-xs font-medium text-neutral-400 transition-colors hover:border-[#2a2f37] hover:text-neutral-200 disabled:cursor-not-allowed disabled:opacity-40'
+
+  const PaginationFooter = (
+    <div className="flex shrink-0 items-center justify-between gap-4 border-t border-[#1f2329] bg-[#0c0d0f] px-5 py-2">
+      <div className="flex items-center gap-2 text-xs text-neutral-500">
+        <span>{t('grid.pagination.pageSizeLabel', { ns: 'translate' })}</span>
+        <select
+          value={pageSize}
+          onChange={(event) => {
+            setPageSize(Number(event.target.value) as typeof pageSize)
+            setCurrentPage(1)
+          }}
+          className="cursor-pointer rounded border border-[#1f2329] bg-[#131518] px-2 py-0.5 text-xs text-neutral-300 focus:outline-none"
+        >
+          {([100, 250, 500, 1000] as const).map((size) => (
+            <option key={size} value={size}>
+              {size}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <span className="font-mono text-[11px] tabular-nums text-neutral-500">
+          {t('grid.pagination.pageOf', {
+            ns: 'translate',
+            current: currentPage,
+            total: totalPages
+          })}
+        </span>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            className={btnBase}
+            disabled={currentPage === 1}
+            onClick={() => setCurrentPage(1)}
+          >
+            {t('grid.pagination.first', { ns: 'translate' })}
+          </button>
+          <button
+            type="button"
+            className={btnBase}
+            disabled={currentPage === 1}
+            onClick={() => setCurrentPage((p) => p - 1)}
+          >
+            {t('grid.pagination.prev', { ns: 'translate' })}
+          </button>
+          <button
+            type="button"
+            className={btnBase}
+            disabled={currentPage === totalPages}
+            onClick={() => setCurrentPage((p) => p + 1)}
+          >
+            {t('grid.pagination.next', { ns: 'translate' })}
+          </button>
+          <button
+            type="button"
+            className={btnBase}
+            disabled={currentPage === totalPages}
+            onClick={() => setCurrentPage(totalPages)}
+          >
+            {t('grid.pagination.last', { ns: 'translate' })}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 
   const filterItems: Array<{
     mode: FilterMode
@@ -341,12 +419,13 @@ export function TranslationGrid({
         </div>
 
         <div className="icosa-scroll min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
-          {filteredEntries.map((entry, index) => {
+          {pageEntries.map((entry, index) => {
             const category = getCategory(entry)
             const isDone = entry.target.trim() !== ''
             const isSelected = selectedUids.has(entry.rowId)
             const isDictionary = category === 'dictionary'
             const charCount = entry.source.length
+            const globalIndex = (currentPage - 1) * pageSize + index
 
             return (
               <div
@@ -369,7 +448,7 @@ export function TranslationGrid({
                     className="cursor-pointer accent-amber-500"
                   />
                   <span className="font-mono text-[11px] tabular-nums text-neutral-600">
-                    {String(index + 1).padStart(3, '0')}
+                    {String(globalIndex + 1).padStart(3, '0')}
                   </span>
                   <span
                     className={cn(
@@ -446,6 +525,8 @@ export function TranslationGrid({
             )
           })}
         </div>
+
+        {PaginationFooter}
       </div>
     )
   }
@@ -467,9 +548,9 @@ export function TranslationGrid({
       </div>
 
       <div className="icosa-scroll min-h-0 flex-1 overflow-y-auto">
-        <div className="px-7 pb-20 pt-5">
+        <div className="px-7 pb-6 pt-5">
           <div className="mx-auto flex max-w-275 flex-col gap-3.5">
-            {filteredEntries.map((entry, index) => {
+            {pageEntries.map((entry, index) => {
               const category = getCategory(entry)
               const isDone = entry.target.trim() !== ''
               const isSelected = selectedUids.has(entry.rowId)
@@ -478,6 +559,7 @@ export function TranslationGrid({
               const wordCount = entry.source.split(/\s+/).filter(Boolean).length
               const charCount = entry.source.length
               const rows = Math.max(2, Math.ceil(charCount / 70))
+              const globalIndex = (currentPage - 1) * pageSize + index
 
               return (
                 <div
@@ -505,7 +587,7 @@ export function TranslationGrid({
                       className="mt-auto font-mono text-[11px] tracking-widest text-neutral-600"
                       style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
                     >
-                      #{String(index + 1).padStart(3, '0')}
+                      #{String(globalIndex + 1).padStart(3, '0')}
                     </span>
 
                     <div
@@ -633,6 +715,8 @@ export function TranslationGrid({
           </div>
         </div>
       </div>
+
+      {PaginationFooter}
     </div>
   )
 }
