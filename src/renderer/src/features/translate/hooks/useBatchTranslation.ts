@@ -10,17 +10,25 @@ import type {
 } from '@/types'
 import type { TranslationSession } from '../types'
 
+type BatchEntry = { uid: string; source: string }
+
 export function useBatchTranslation(session: TranslationSession) {
   const { t } = useAppTranslation(['translate', 'toasts', 'common', 'errors'])
   const [isBatchTranslating, setIsBatchTranslating] = useState(false)
   const [activeJobId, setActiveJobId] = useState<string | null>(null)
   const [batchCompleted, setBatchCompleted] = useState(0)
   const [batchTotal, setBatchTotal] = useState(0)
+  const [pendingDecision, setPendingDecision] = useState(false)
+  const [pendingTranslatedCount, setPendingTranslatedCount] = useState(0)
+  const [pendingUntranslatedCount, setPendingUntranslatedCount] = useState(0)
   const batchCleanupRef = useRef<(() => void) | null>(null)
   const activeJobIdRef = useRef<string | null>(null)
   const pendingUidsRef = useRef<Set<string>>(new Set())
   const batchErrorsRef = useRef<Map<string, string>>(new Map())
-  const { entries, sourceLang, targetLang, updateEntry, clearSelection, selectEntries } = session
+  const pendingAllEntriesRef = useRef<BatchEntry[]>([])
+  const pendingUntranslatedEntriesRef = useRef<BatchEntry[]>([])
+  const pendingProviderRef = useRef<'openai' | 'deepl'>('deepl')
+  const { sourceLang, targetLang, updateEntry, clearSelection, selectEntries } = session
 
   const clearListeners = useCallback(() => {
     batchCleanupRef.current?.()
@@ -55,27 +63,15 @@ export function useBatchTranslation(session: TranslationSession) {
     return () => clearListeners()
   }, [clearListeners])
 
-  const batchTranslate = useCallback(
-    async (provider: 'openai' | 'deepl') => {
-      if (isBatchTranslating) return
-
-      const selectedEntries = materializeSelectedEntries(session).map((entry) => ({
-        uid: entry.rowId,
-        source: entry.source
-      }))
-
-      if (selectedEntries.length === 0) {
-        toast.info(t('batchBar.noSelection', { ns: 'translate' }))
-        return
-      }
-
-      pendingUidsRef.current = new Set(selectedEntries.map((entry) => entry.uid))
+  const dispatchBatchEntries = useCallback(
+    async (entriesToSend: BatchEntry[], provider: 'openai' | 'deepl') => {
+      pendingUidsRef.current = new Set(entriesToSend.map((e) => e.uid))
       batchErrorsRef.current = new Map()
       setBatchCompleted(0)
-      setBatchTotal(selectedEntries.length)
+      setBatchTotal(entriesToSend.length)
       setIsBatchTranslating(true)
       clearListeners()
-      const selectedEntriesByUid = new Map(selectedEntries.map((entry) => [entry.uid, entry]))
+      const selectedEntriesByUid = new Map(entriesToSend.map((e) => [e.uid, e]))
 
       const handleBatchProgress = ({
         jobId,
@@ -161,7 +157,7 @@ export function useBatchTranslation(session: TranslationSession) {
         void window.api.log.write({
           scope: 'renderer.batchTranslation',
           message,
-          meta: { provider, sourceLang, targetLang, total: selectedEntries.length }
+          meta: { provider, sourceLang, targetLang, total: entriesToSend.length }
         })
         finishBatchJob(jobId)
       }
@@ -177,7 +173,7 @@ export function useBatchTranslation(session: TranslationSession) {
 
       try {
         const { jobId } = await window.api.translation.batch({
-          entries: selectedEntries,
+          entries: entriesToSend,
           provider,
           sourceLang,
           targetLang
@@ -197,23 +193,84 @@ export function useBatchTranslation(session: TranslationSession) {
           scope: 'renderer.batchTranslation',
           message: err instanceof Error ? err.message : String(err),
           stack: err instanceof Error ? err.stack : undefined,
-          meta: { provider, sourceLang, targetLang, total: selectedEntries.length }
+          meta: { provider, sourceLang, targetLang, total: entriesToSend.length }
         })
       }
     },
     [
       clearListeners,
       clearSelection,
-      entries,
       finishBatchJob,
-      isBatchTranslating,
       restorePendingSelection,
-      session,
       sourceLang,
       targetLang,
       updateEntry
     ]
   )
+
+  const clearPending = useCallback(() => {
+    setPendingDecision(false)
+    setPendingTranslatedCount(0)
+    setPendingUntranslatedCount(0)
+    pendingAllEntriesRef.current = []
+    pendingUntranslatedEntriesRef.current = []
+  }, [])
+
+  const batchTranslate = useCallback(
+    async (provider: 'openai' | 'deepl') => {
+      if (isBatchTranslating) return
+
+      const materialized = materializeSelectedEntries(session)
+      const toEntry = (e: (typeof materialized)[number]): BatchEntry => ({
+        uid: e.rowId,
+        source: e.source
+      })
+
+      if (materialized.length === 0) {
+        toast.info(t('batchBar.noSelection', { ns: 'translate' }))
+        return
+      }
+
+      const translated = materialized.filter((e) => e.target.trim() !== '')
+      const untranslated = materialized.filter((e) => e.target.trim() === '')
+
+      if (translated.length === 0) {
+        await dispatchBatchEntries(materialized.map(toEntry), provider)
+        return
+      }
+
+      // some entries already translated - gate with warning dialog
+      pendingAllEntriesRef.current = materialized.map(toEntry)
+      pendingUntranslatedEntriesRef.current = untranslated.map(toEntry)
+      pendingProviderRef.current = provider
+      setPendingTranslatedCount(translated.length)
+      setPendingUntranslatedCount(untranslated.length)
+      setPendingDecision(true)
+    },
+    [isBatchTranslating, session, dispatchBatchEntries]
+  )
+
+  const confirmProceedAll = useCallback(async () => {
+    const entriesToSend = pendingAllEntriesRef.current
+    const provider = pendingProviderRef.current
+    clearPending()
+    await dispatchBatchEntries(entriesToSend, provider)
+  }, [clearPending, dispatchBatchEntries])
+
+  const confirmSendOnlyUntranslated = useCallback(async () => {
+    const entriesToSend = pendingUntranslatedEntriesRef.current
+    const provider = pendingProviderRef.current
+    clearPending()
+    if (entriesToSend.length === 0) {
+      toast.info(t('batchBar.noSelection', { ns: 'translate' }))
+      return
+    }
+    await dispatchBatchEntries(entriesToSend, provider)
+  }, [clearPending, dispatchBatchEntries])
+
+  const cancelPending = useCallback(() => {
+    clearPending()
+  }, [clearPending])
 
   const cancelBatch = useCallback(async () => {
     if (!activeJobId) return
@@ -226,6 +283,12 @@ export function useBatchTranslation(session: TranslationSession) {
     batchTotal,
     batchTranslate,
     cancelBatch,
-    activeJobId
+    activeJobId,
+    pendingDecision,
+    pendingTranslatedCount,
+    pendingUntranslatedCount,
+    confirmProceedAll,
+    confirmSendOnlyUntranslated,
+    cancelPending
   }
 }

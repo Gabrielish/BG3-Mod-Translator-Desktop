@@ -87,6 +87,13 @@
       "last": "Última"
     }
   },
+  "alreadyTranslatedDialog": {
+    "title": "Entradas já traduzidas selecionadas",
+    "description": "{{translatedCount}} das entradas selecionadas já têm tradução. Como deseja prosseguir?",
+    "proceedAll": "Traduzir tudo",
+    "onlyUntranslated": "Enviar apenas não traduzidas ({{untranslatedCount}})",
+    "cancel": "Cancelar"
+  },
   "batchBar": {
     "selectedCount_one": "{{count}} entrada selecionada",
     "selectedCount_other": "{{count}} entradas selecionadas",
