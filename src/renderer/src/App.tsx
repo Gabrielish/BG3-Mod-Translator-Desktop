@@ -5,6 +5,7 @@ import { TranslationSessionProvider } from './context/TranslationSession'
 import { DictionaryPage } from './pages/DictionaryPage'
 import { EntryEditPage } from './pages/EntryEditPage'
 import { ExtractPage } from './pages/ExtractPage'
+import { ManageModsPage } from './pages/ManageModsPage'
 import { MergeToolPage } from './pages/MergeToolPage'
 import { PackagePage } from './pages/PackagePage'
 import { SettingsPage } from './pages/SettingsPage'
@@ -28,6 +29,7 @@ function App(): React.JSX.Element {
             <Route path="/translate/entry/:uid" element={<EntryEditPage />} />
           </Route>
           <Route path="/dictionary" element={<DictionaryPage />} />
+          <Route path="/mods" element={<ManageModsPage />} />
           <Route path="/extract" element={<ExtractPage />} />
           <Route path="/package" element={<PackagePage />} />
           <Route path="/merge" element={<MergeToolPage />} />
