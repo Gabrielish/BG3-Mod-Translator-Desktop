@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer } from 'react'
 import { i18n } from '@/i18n'
-import type { XmlEntry } from '@/types'
+import type { XmlEntry, XmlLoadProgress } from '@/types'
 
 export interface TranslationSessionEntry extends XmlEntry {
   rowId: string
@@ -36,9 +36,7 @@ export function entryMatchesFilter(entry: TranslationSessionEntry, filter: Filte
   if (filter.mode === 'tags' && !hasXmlTags(entry)) return false
   if (filter.search) {
     const query = filter.search.toLowerCase()
-    return (
-      entry.source.toLowerCase().includes(query) || entry.target.toLowerCase().includes(query)
-    )
+    return entry.source.toLowerCase().includes(query) || entry.target.toLowerCase().includes(query)
   }
   return true
 }
@@ -46,6 +44,7 @@ export function entryMatchesFilter(entry: TranslationSessionEntry, filter: Filte
 export interface TranslationSessionState {
   phase: Phase
   loadingLabel: string
+  loadingProgress: XmlLoadProgress | null
   entries: TranslationSessionEntry[]
   selection: SelectionState
   modName: string
@@ -70,6 +69,7 @@ const EMPTY_EXPLICIT: SelectionState = { kind: 'explicit', uids: new Set() }
 
 type Action =
   | { type: 'SET_PHASE'; phase: Phase; loadingLabel?: string }
+  | { type: 'SET_LOADING_PROGRESS'; progress: XmlLoadProgress | null }
   | { type: 'SET_ENTRIES'; entries: TranslationSessionEntry[] }
   | { type: 'UPDATE_ENTRY'; rowId: string; target: string }
   | { type: 'MARK_MANUAL'; rowId: string }
@@ -90,13 +90,16 @@ function reducer(state: TranslationSessionState, action: Action): TranslationSes
         phase: action.phase,
         loadingLabel: action.phase === 'loading' ? (action.loadingLabel ?? state.loadingLabel) : ''
       }
+    case 'SET_LOADING_PROGRESS':
+      return { ...state, loadingProgress: action.progress }
     case 'SET_ENTRIES':
       return {
         ...state,
         entries: action.entries,
         selection: EMPTY_EXPLICIT,
         phase: 'loaded',
-        loadingLabel: ''
+        loadingLabel: '',
+        loadingProgress: null
       }
     case 'UPDATE_ENTRY':
       return {
@@ -146,6 +149,7 @@ function reducer(state: TranslationSessionState, action: Action): TranslationSes
         ...state,
         phase: 'idle',
         loadingLabel: '',
+        loadingProgress: null,
         entries: [],
         selection: EMPTY_EXPLICIT,
         inputPath: null
@@ -198,6 +202,7 @@ export function TranslationSessionProvider({
   const [state, dispatch] = useReducer(reducer, {
     phase: 'idle',
     loadingLabel: '',
+    loadingProgress: null,
     entries: [],
     selection: EMPTY_EXPLICIT,
     modName: '',
@@ -236,12 +241,20 @@ export function TranslationSessionProvider({
         phase: 'loading',
         loadingLabel: i18n.t('setup.loadingEntries', { ns: 'translate' })
       })
-      const entries = await window.api.xml.load({
-        inputPath: storedPath,
-        sourceLang,
-        targetLang,
-        modName
+      const unsub = window.api.xml.onLoadProgress((p) => {
+        dispatch({ type: 'SET_LOADING_PROGRESS', progress: p })
       })
+      let entries: Awaited<ReturnType<typeof window.api.xml.load>>
+      try {
+        entries = await window.api.xml.load({
+          inputPath: storedPath,
+          sourceLang,
+          targetLang,
+          modName
+        })
+      } finally {
+        unsub()
+      }
       if (modName) {
         dispatch({
           type: 'SET_PHASE',
