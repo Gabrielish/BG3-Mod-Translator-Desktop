@@ -40,16 +40,16 @@ export function useDictionarySave(session: TranslationSession) {
 
     setIsSaving(true)
     try {
-      for (const entry of toSave) {
-        await window.api.dictionary.upsert({
+      await window.api.dictionary.bulkUpsert(
+        toSave.map((entry) => ({
           language1: sourceLang,
           language2: targetLang,
           textLanguage1: encodeEntities(entry.source),
           textLanguage2: encodeEntities(entry.target),
           modName: modName || null,
           uid: entry.uid || null
-        })
-      }
+        }))
+      )
       toast.success(t('translate.savedCount', { ns: 'toasts', count: toSave.length }))
     } catch (err) {
       toast.error(getLocalizedErrorMessage(err, t))

@@ -291,11 +291,12 @@ export class DictionaryRepository {
     return map
   }
 
-  // - modName param is reserved for future scoping; the index always covers the full language pair
+  // - modName reserved for future scoping; priorityMods (if set) are checked first before the current mod and global fallback
   loadMatchIndex(
     sourceLang: string,
     targetLang: string,
-    _modName?: string | null
+    _modName?: string | null,
+    priorityMods?: readonly string[]
   ): DictionaryMatchIndex {
     const [l1, l2, swapped] = normalizeLangs(sourceLang, targetLang)
 
@@ -338,14 +339,25 @@ export class DictionaryRepository {
       }
     }
 
+    // Normalize once at index-build time; never per resolve call
+    const normalizedPriority = (priorityMods ?? [])
+      .map((m) => m?.trim().toLowerCase())
+      .filter((m): m is string => !!m)
+
     return {
       byModUidKey,
       byModKey,
       byKey,
       resolve(params) {
-        const normalizedMod = params.modName?.trim().toLowerCase() || null
         const sourceKey = dictionaryTextKey(params.sourceText)
 
+        // Priority mods checked first in order (text only - UIDs are mod-local)
+        for (const pm of normalizedPriority) {
+          const entry = byModKey.get(`${pm}|${sourceKey}`)
+          if (entry) return { entry, matchType: 'mod-text' }
+        }
+
+        const normalizedMod = params.modName?.trim().toLowerCase() || null
         if (normalizedMod) {
           const uid = params.uid?.trim()
           if (uid) {
@@ -362,6 +374,49 @@ export class DictionaryRepository {
         return undefined
       }
     }
+  }
+
+  // Single-SELECT + batch INSERT/UPDATE alternative to N sequential upsert calls.
+  // Fast path requires all rows to share the same modName (non-null) and language pair.
+  // Falls back to per-row upsert when modName is absent.
+  bulkUpsert(rows: UpsertParams[]): void {
+    if (rows.length === 0) return
+    const { sourceLang, targetLang, modName } = rows[0]
+    const trimmedModName = modName?.trim() || null
+
+    if (!trimmedModName) {
+      for (const row of rows) this.upsert(row)
+      return
+    }
+
+    const [, , swapped] = normalizeLangs(sourceLang, targetLang)
+    const keyMap = this.loadKeyMap(sourceLang, targetLang, trimmedModName)
+    const targetColumn: 'language1' | 'language2' = swapped ? 'language1' : 'language2'
+
+    const toInsert: NewDictionaryEntry[] = []
+    const toUpdate: { id: number; targetText: string; targetTextKey: string; uid: string | null }[] =
+      []
+
+    for (const row of rows) {
+      const sourceText = normalizeDictionaryText(row.sourceText)
+      const targetText = normalizeDictionaryText(row.targetText)
+      const sourceKey = dictionaryTextKey(sourceText)
+      const existing = keyMap.get(sourceKey)
+
+      if (existing) {
+        toUpdate.push({
+          id: existing.id,
+          targetText,
+          targetTextKey: dictionaryTextKey(targetText),
+          uid: row.uid?.trim() || existing.uid
+        })
+      } else {
+        toInsert.push(this.toValues(row))
+      }
+    }
+
+    if (toInsert.length > 0) this.bulkInsert(toInsert)
+    if (toUpdate.length > 0) this.bulkUpdate(toUpdate, targetColumn)
   }
 
   // Multi-row VALUES INSERT in a single transaction. Chunks internally so the bound
@@ -447,6 +502,15 @@ export class DictionaryRepository {
           eq(dictionary.modName, modName)
         )
       )
+      .get() as { count: number } | undefined
+    return result?.count ?? 0
+  }
+
+  countAllByMod(modName: string): number {
+    const result = this.db
+      .select({ count: sql<number>`count(*)` })
+      .from(dictionary)
+      .where(eq(dictionary.modName, modName))
       .get() as { count: number } | undefined
     return result?.count ?? 0
   }

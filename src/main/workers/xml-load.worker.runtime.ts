@@ -5,6 +5,7 @@ import {
   DictionaryRepository,
   getDictionaryTargetText
 } from '../database/repositories/dictionary.repo'
+import { ModRepository } from '../database/repositories/mod.repo'
 import * as schema from '../database/schema'
 import { unpackMod } from '../services/lslib.service'
 import { decodeEntities } from '../services/xml-entities.service'
@@ -112,7 +113,13 @@ export async function runXmlLoadWorker(
     const result: XmlEntry[] = new Array(total)
 
     post({ phase: 'loading-cache' })
-    const index = new DictionaryRepository(db).loadMatchIndex(sourceLang, targetLang)
+    const priorityMods = new ModRepository(db).getPriorityOrdered()
+    const index = new DictionaryRepository(db).loadMatchIndex(
+      sourceLang,
+      targetLang,
+      null,
+      priorityMods
+    )
 
     for (let i = 0; i < total; i += MATCH_CHUNK) {
       const end = Math.min(i + MATCH_CHUNK, total)
