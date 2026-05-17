@@ -1,11 +1,14 @@
 import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
+import type { MergeProgress, MergeResult } from '../../preload/api-types'
 import { DictionaryRepository } from '../database/repositories/dictionary.repo'
 import type { NewDictionaryEntry } from '../database/schema'
 import * as schema from '../database/schema'
 import { type LocalizationEntry, parseLocalizationXml } from '../services/xml-parser.service'
 import { dictionaryTextKey, normalizeDictionaryText } from '../utils/dictionaryText'
 import { normalizeLangs } from '../utils/languages'
+
+export type { MergeProgress, MergeResult }
 
 export interface MergeWorkerInput {
   sourceXmlPath: string
@@ -15,20 +18,6 @@ export interface MergeWorkerInput {
   modName: string
   dbPath: string
 }
-
-export interface MergeResult {
-  matched: number
-  sourceOnly: number
-  targetOnly: number
-}
-
-export type MergeProgress =
-  | { phase: 'parsing' }
-  | { phase: 'loading-map' }
-  | { phase: 'classifying' }
-  | { phase: 'writing'; processed: number; total: number }
-  | { phase: 'done'; result: MergeResult }
-  | { phase: 'error'; message: string }
 
 interface PendingUpdate {
   id: number

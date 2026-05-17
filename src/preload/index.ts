@@ -57,12 +57,10 @@ const api: AppApi = {
       provider: 'openai' | 'deepl'
       sourceLang: string
       targetLang: string
-    }): Promise<{ jobId: string }> =>
-      ipcRenderer.invoke('translation:batch', payload),
+    }): Promise<{ jobId: string }> => ipcRenderer.invoke('translation:batch', payload),
 
-    onBatchProgress: (
-      cb: (data: TranslationBatchProgressEvent) => void
-    ): UnsubscribeFn => on('translation:batchProgress', cb),
+    onBatchProgress: (cb: (data: TranslationBatchProgressEvent) => void): UnsubscribeFn =>
+      on('translation:batchProgress', cb),
 
     onBatchDone: (cb: (data: TranslationBatchDoneEvent) => void): UnsubscribeFn =>
       on('translation:batchDone', cb),
@@ -122,10 +120,8 @@ const api: AppApi = {
     delete: (params: { id: number }): Promise<{ success: boolean }> =>
       ipcRenderer.invoke('dictionary:delete', params),
 
-    previewImport: (params: {
-      filePath: string
-      format: 'csv' | 'xlsx'
-    }) => ipcRenderer.invoke('dictionary:previewImport', params),
+    previewImport: (params: { filePath: string; format: 'csv' | 'xlsx' }) =>
+      ipcRenderer.invoke('dictionary:previewImport', params),
 
     import: (params: { filePath: string; format: 'csv' | 'xlsx' }): Promise<{ count: number }> =>
       ipcRenderer.invoke('dictionary:import', params),
@@ -289,7 +285,10 @@ const api: AppApi = {
       targetCandidateId: string
       targetLang: string
       modName: string
-    }) => ipcRenderer.invoke('merge:run', params)
+    }) => ipcRenderer.invoke('merge:run', params),
+
+    onProgress: (cb: (data: import('./api-types').MergeProgress) => void): UnsubscribeFn =>
+      on('merge:progress', cb)
   },
 
   config: {
