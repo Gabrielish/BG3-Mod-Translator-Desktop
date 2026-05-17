@@ -27,6 +27,10 @@
   "bottomBar": {
     "ready": "Ready to merge files",
     "idle": "Complete the three steps to run merge",
-    "running": "Merging..."
+    "running": "Merging...",
+    "progressParsing": "Parsing XMLs…",
+    "progressLoadingMap": "Loading existing entries…",
+    "progressClassifying": "Classifying entries…",
+    "progressWriting": "Writing {{processed}} / {{total}}"
   }
 }

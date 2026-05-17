@@ -27,6 +27,10 @@
   "bottomBar": {
     "ready": "Pronto para mesclar os arquivos",
     "idle": "Complete os três passos para iniciar a fusão",
-    "running": "Mesclando..."
+    "running": "Mesclando...",
+    "progressParsing": "Lendo XMLs…",
+    "progressLoadingMap": "Carregando entradas existentes…",
+    "progressClassifying": "Classificando entradas…",
+    "progressWriting": "Gravando {{processed}} / {{total}}"
   }
 }
