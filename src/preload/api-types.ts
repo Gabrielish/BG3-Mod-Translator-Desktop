@@ -264,6 +264,11 @@ export interface DictionaryApi {
     lang2: string
     limit?: number
   }): Promise<SimilarEntry[]>
+  deleteByFilter(filters: DictionaryFilters): Promise<{ deleted: number }>
+  replaceByFilter(
+    filters: DictionaryFilters,
+    patch: { findText: string; replaceText: string; column: 'language1' | 'language2' }
+  ): Promise<{ updated: number }>
 }
 
 export interface LanguageApi {

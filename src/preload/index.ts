@@ -142,7 +142,20 @@ const api: AppApi = {
     }): Promise<{ success: boolean }> => ipcRenderer.invoke('dictionary:export', params),
 
     similar: (params: { text: string; lang1: string; lang2: string; limit?: number }) =>
-      ipcRenderer.invoke('dictionary:similar', params)
+      ipcRenderer.invoke('dictionary:similar', params),
+
+    deleteByFilter: (filters: {
+      text?: string
+      modName?: string
+      sourceLang?: string
+      targetLang?: string
+    }): Promise<{ deleted: number }> => ipcRenderer.invoke('dictionary:deleteByFilter', filters),
+
+    replaceByFilter: (
+      filters: { text?: string; modName?: string; sourceLang?: string; targetLang?: string },
+      patch: { findText: string; replaceText: string; column: 'language1' | 'language2' }
+    ): Promise<{ updated: number }> =>
+      ipcRenderer.invoke('dictionary:replaceByFilter', { filters, patch })
   },
 
   language: {

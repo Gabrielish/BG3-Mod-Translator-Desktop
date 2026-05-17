@@ -77,7 +77,22 @@
     "containsTags": "contains tags",
     "dictionarySuggestion": "Dictionary suggests:",
     "dictionaryTagMod": "1 term (mod)",
-    "dictionaryTag": "1 term"
+    "dictionaryTag": "1 term",
+    "pagination": {
+      "pageSizeLabel": "Rows per page",
+      "pageOf": "Page {{current}} of {{total}}",
+      "first": "First",
+      "prev": "Previous",
+      "next": "Next",
+      "last": "Last"
+    }
+  },
+  "alreadyTranslatedDialog": {
+    "title": "Already-translated entries selected",
+    "description": "{{translatedCount}} of the selected entries already have a translation. How do you want to proceed?",
+    "proceedAll": "Translate everything",
+    "onlyUntranslated": "Send only untranslated ({{untranslatedCount}})",
+    "cancel": "Cancel"
   },
   "batchBar": {
     "selectedCount_one": "{{count}} entry selected",

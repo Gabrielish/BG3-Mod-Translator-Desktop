@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core'
+import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core'
 import { sql } from 'drizzle-orm'
 
 const timestamps = {
@@ -43,20 +43,32 @@ export const modMeta = sqliteTable('mod_meta', {
 
 // Invariant: language1 < language2 (alphabetically sorted) - prevents mirrored duplicates.
 // UID is metadata only. Matching and persistence are based on mod + source text, then source text.
-export const dictionary = sqliteTable('dictionary', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  language1: text('language1')
-    .notNull()
-    .references(() => language.code),
-  language2: text('language2')
-    .notNull()
-    .references(() => language.code),
-  textLanguage1: text('text_language1').notNull(),
-  textLanguage2: text('text_language2').notNull(),
-  modName: text('mod_name').references(() => mod.name),
-  uid: text('uid'),
-  ...timestamps
-})
+export const dictionary = sqliteTable(
+  'dictionary',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    language1: text('language1')
+      .notNull()
+      .references(() => language.code),
+    language2: text('language2')
+      .notNull()
+      .references(() => language.code),
+    textLanguage1: text('text_language1').notNull(),
+    textLanguage2: text('text_language2').notNull(),
+    modName: text('mod_name').references(() => mod.name),
+    uid: text('uid'),
+    ...timestamps
+  },
+  (table) => ({
+    dictionary_langs_idx: index('dictionary_langs_idx').on(table.language1, table.language2),
+    dictionary_langs_mod_idx: index('dictionary_langs_mod_idx').on(
+      table.language1,
+      table.language2,
+      table.modName
+    ),
+    dictionary_mod_idx: index('dictionary_mod_idx').on(table.modName)
+  })
+)
 
 export const config = sqliteTable('config', {
   key: text('key').primaryKey(),

@@ -8,6 +8,7 @@ import { useDictionarySave } from '../hooks/useDictionarySave'
 import { useLoadedEditorShortcuts } from '../hooks/useLoadedEditorShortcuts'
 import { useTranslationExport } from '../hooks/useTranslationExport'
 import type { TranslationSession } from '../types'
+import { AlreadyTranslatedDialog } from '@/components/translation/AlreadyTranslatedDialog'
 import { EditorHeader } from './EditorHeader'
 import { PackageExportModal } from './PackageExportModal'
 
@@ -83,7 +84,7 @@ export function TranslateLoadedScreen({ session }: TranslateLoadedScreenProps): 
       </div>
 
       <BatchActionBar
-        selectedCount={session.selectedUids.size}
+        selectedCount={session.selectedCount}
         batchCompleted={batch.batchCompleted}
         batchTotal={batch.batchTotal}
         onTranslateDeepL={() => batch.batchTranslate('deepl')}
@@ -91,6 +92,15 @@ export function TranslateLoadedScreen({ session }: TranslateLoadedScreenProps): 
         onCancelTranslation={batch.cancelBatch}
         onClearSelection={session.clearSelection}
         isTranslating={batch.isBatchTranslating}
+      />
+
+      <AlreadyTranslatedDialog
+        open={batch.pendingDecision}
+        translatedCount={batch.pendingTranslatedCount}
+        untranslatedCount={batch.pendingUntranslatedCount}
+        onProceedAll={batch.confirmProceedAll}
+        onSendOnlyUntranslated={batch.confirmSendOnlyUntranslated}
+        onClose={batch.cancelPending}
       />
 
       {exportFlow.exportMeta && (

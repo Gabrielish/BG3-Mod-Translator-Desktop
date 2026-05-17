@@ -8,8 +8,11 @@ import {
   useState,
   useTransition
 } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import {
+  type FilterSpec,
   type TranslationSessionEntry,
+  materializeSelectedEntries,
   useTranslationSession
 } from '@/context/TranslationSession'
 import { HighlightedTextarea } from '@/components/shared/HighlightedTextarea'
@@ -70,16 +73,21 @@ export function TranslationGrid({
   viewMode
 }: TranslationGridProps): React.JSX.Element {
   const { t } = useAppTranslation(['translate', 'common'])
-  const { selectedUids, selectEntry, selectEntries, sourceLang, targetLang } =
-    useTranslationSession()
+  const session = useTranslationSession()
+  const { selection, isSelected, selectAllMatching, toggleEntry, clearSelection, sourceLang, targetLang } =
+    session
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<FilterMode>('all')
   const deferredSearch = useDeferredValue(search)
   const deferredFilter = useDeferredValue(filter)
   const [isPending, startFilterTransition] = useTransition()
+  const [pageSize, setPageSize] = useState<100 | 250 | 500 | 1000>(250)
+  const [currentPage, setCurrentPage] = useState(1)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const textareaRefs = useRef<Map<string, HTMLTextAreaElement>>(new Map())
   const savedByEnterRef = useRef<Set<string>>(new Set())
+  const sideParentRef = useRef<HTMLDivElement>(null)
+  const stackedParentRef = useRef<HTMLDivElement>(null)
 
   const counts = useMemo(() => {
     let translated = 0
@@ -113,21 +121,48 @@ export function TranslationGrid({
     })
   }, [deferredFilter, deferredSearch, entries])
 
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [deferredFilter, deferredSearch, entries])
+
+  // clear selection when filter or search changes so count never disagrees with checkbox
+  useEffect(() => {
+    clearSelection()
+  }, [deferredFilter, deferredSearch, clearSelection])
+
+  // single source of truth for which entries "select-all" covers
+  const currentFilter: FilterSpec = { mode: deferredFilter, search: deferredSearch }
+
+  const totalPages = Math.max(1, Math.ceil(filteredEntries.length / pageSize))
+  const pageEntries = filteredEntries.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+
+  const sideVirtualizer = useVirtualizer({
+    count: pageEntries.length,
+    getScrollElement: () => sideParentRef.current,
+    estimateSize: () => 72,
+    overscan: 10,
+  })
+
+  const stackedVirtualizer = useVirtualizer({
+    count: pageEntries.length,
+    getScrollElement: () => stackedParentRef.current,
+    estimateSize: () => 220,
+    overscan: 10,
+  })
+
   const selectedStats = useMemo(() => {
-    let selectedStrings = 0
-    let selectedCharacters = 0
-
-    for (const entry of entries) {
-      if (!selectedUids.has(entry.rowId)) continue
-      selectedStrings += 1
-      selectedCharacters += entry.source.length
+    const materialized = materializeSelectedEntries(session)
+    return {
+      selectedStrings: materialized.length,
+      selectedCharacters: materialized.reduce((sum, e) => sum + e.source.length, 0)
     }
-
-    return { selectedStrings, selectedCharacters }
-  }, [entries, selectedUids])
+  }, [session.selection, session.entries])
 
   const allFiltered =
-    filteredEntries.length > 0 && filteredEntries.every((entry) => selectedUids.has(entry.rowId))
+    selection.kind === 'all-matching' &&
+    selection.excluded.size === 0 &&
+    selection.filter.mode === deferredFilter &&
+    selection.filter.search === deferredSearch
 
   useEffect(() => {
     const handleFindShortcut = (event: KeyboardEvent) => {
@@ -143,10 +178,11 @@ export function TranslationGrid({
   }, [])
 
   const handleSelectAll = (checked: boolean) => {
-    selectEntries(
-      filteredEntries.map((entry) => entry.rowId),
-      checked
-    )
+    if (checked) {
+      selectAllMatching(currentFilter)
+    } else {
+      clearSelection()
+    }
   }
 
   const focusEntry = (rowId: string) => {
@@ -181,8 +217,8 @@ export function TranslationGrid({
 
     if (value.trim()) onEntrySave(entry.rowId, value)
 
-    const nextIndex = filteredEntries.findIndex((item) => item.rowId === entry.rowId) + 1
-    const nextEntry = filteredEntries[nextIndex]
+    const nextIndex = pageEntries.findIndex((item) => item.rowId === entry.rowId) + 1
+    const nextEntry = pageEntries[nextIndex]
     if (!nextEntry) return
 
     const nextTextarea = textareaRefs.current.get(nextEntry.rowId)
@@ -190,6 +226,75 @@ export function TranslationGrid({
     nextTextarea.focus()
     nextTextarea.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   }
+
+  const btnBase =
+    'inline-flex h-7 cursor-pointer items-center rounded border border-[#1f2329] bg-[#131518] px-2 text-xs font-medium text-neutral-400 transition-colors hover:border-[#2a2f37] hover:text-neutral-200 disabled:cursor-not-allowed disabled:opacity-40'
+
+  const PaginationFooter = (
+    <div className="flex shrink-0 items-center justify-between gap-4 border-t border-[#1f2329] bg-[#0c0d0f] px-5 py-2">
+      <div className="flex items-center gap-2 text-xs text-neutral-500">
+        <span>{t('grid.pagination.pageSizeLabel', { ns: 'translate' })}</span>
+        <select
+          value={pageSize}
+          onChange={(event) => {
+            setPageSize(Number(event.target.value) as typeof pageSize)
+            setCurrentPage(1)
+          }}
+          className="cursor-pointer rounded border border-[#1f2329] bg-[#131518] px-2 py-0.5 text-xs text-neutral-300 focus:outline-none"
+        >
+          {([100, 250, 500, 1000] as const).map((size) => (
+            <option key={size} value={size}>
+              {size}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <span className="font-mono text-[11px] tabular-nums text-neutral-500">
+          {t('grid.pagination.pageOf', {
+            ns: 'translate',
+            current: currentPage,
+            total: totalPages
+          })}
+        </span>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            className={btnBase}
+            disabled={currentPage === 1}
+            onClick={() => setCurrentPage(1)}
+          >
+            {t('grid.pagination.first', { ns: 'translate' })}
+          </button>
+          <button
+            type="button"
+            className={btnBase}
+            disabled={currentPage === 1}
+            onClick={() => setCurrentPage((p) => p - 1)}
+          >
+            {t('grid.pagination.prev', { ns: 'translate' })}
+          </button>
+          <button
+            type="button"
+            className={btnBase}
+            disabled={currentPage === totalPages}
+            onClick={() => setCurrentPage((p) => p + 1)}
+          >
+            {t('grid.pagination.next', { ns: 'translate' })}
+          </button>
+          <button
+            type="button"
+            className={btnBase}
+            disabled={currentPage === totalPages}
+            onClick={() => setCurrentPage(totalPages)}
+          >
+            {t('grid.pagination.last', { ns: 'translate' })}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 
   const filterItems: Array<{
     mode: FilterMode
@@ -340,112 +445,130 @@ export function TranslationGrid({
           </div>
         </div>
 
-        <div className="icosa-scroll min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
-          {filteredEntries.map((entry, index) => {
-            const category = getCategory(entry)
-            const isDone = entry.target.trim() !== ''
-            const isSelected = selectedUids.has(entry.rowId)
-            const isDictionary = category === 'dictionary'
-            const charCount = entry.source.length
+        <div
+          ref={sideParentRef}
+          className="icosa-scroll min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]"
+        >
+          <div style={{ height: sideVirtualizer.getTotalSize(), position: 'relative' }}>
+            {sideVirtualizer.getVirtualItems().map((virtualItem) => {
+              const entry = pageEntries[virtualItem.index]
+              const category = getCategory(entry)
+              const isDone = entry.target.trim() !== ''
+              const isRowSelected = isSelected(entry.rowId)
+              const isDictionary = category === 'dictionary'
+              const charCount = entry.source.length
+              const globalIndex = (currentPage - 1) * pageSize + virtualItem.index
 
-            return (
-              <div
-                key={entry.rowId}
-                className={cn(
-                  'group grid border-b border-[#1f2329] transition-colors hover:bg-[#131518]/60 focus-within:bg-[#131518] focus-within:shadow-[inset_3px_0_0_#f59e0b]',
-                  isSelected && 'bg-blue-950/10'
-                )}
-                style={{ gridTemplateColumns: '80px 1fr 1fr' }}
-              >
+              return (
                 <div
-                  className="flex cursor-pointer flex-col items-center gap-2 border-r border-[#1f2329] bg-[#0f1114] px-3 py-3"
-                  onClick={() => focusEntry(entry.rowId)}
+                  key={entry.rowId}
+                  data-index={virtualItem.index}
+                  ref={sideVirtualizer.measureElement}
+                  className={cn(
+                    'group grid border-b border-[#1f2329] transition-colors hover:bg-[#131518]/60 focus-within:bg-[#131518] focus-within:shadow-[inset_3px_0_0_#f59e0b]',
+                    isRowSelected && 'bg-blue-950/10'
+                  )}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    transform: `translateY(${virtualItem.start}px)`,
+                    gridTemplateColumns: '80px 1fr 1fr',
+                  }}
                 >
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={(event) => selectEntry(entry.rowId, event.target.checked)}
+                  <div
+                    className="flex cursor-pointer flex-col items-center gap-2 border-r border-[#1f2329] bg-[#0f1114] px-3 py-3"
+                    onClick={() => focusEntry(entry.rowId)}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isRowSelected}
+                      onChange={() => toggleEntry(entry.rowId)}
+                      onClick={(event) => event.stopPropagation()}
+                      className="cursor-pointer accent-amber-500"
+                    />
+                    <span className="font-mono text-[11px] tabular-nums text-neutral-600">
+                      {String(globalIndex + 1).padStart(3, '0')}
+                    </span>
+                    <span
+                      className={cn(
+                        'mt-auto h-1.5 w-1.5 rounded-full transition-colors',
+                        isDone ? 'bg-amber-500' : 'bg-neutral-700'
+                      )}
+                    />
+                  </div>
+
+                  <div
+                    className="flex min-w-0 cursor-pointer flex-col gap-2 px-4 py-3"
+                    onClick={() => focusEntry(entry.rowId)}
+                  >
+                    <div className="wrap-break-word font-mono text-[13px] leading-[1.6] text-neutral-200 whitespace-pre-wrap">
+                      {entry.source ? (
+                        renderSource(entry.source)
+                      ) : (
+                        <span className="italic text-neutral-600">
+                          {t('grid.emptySource', { ns: 'translate' })}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {isDictionary && (
+                        <span className="inline-flex items-center gap-1 rounded bg-blue-500/12 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-blue-400">
+                          <BookOpen size={10} /> D <span className="text-blue-500/70">1</span>
+                        </span>
+                      )}
+                      <span className="font-mono text-[10px] text-neutral-600">
+                        {t('grid.charCount', { ns: 'translate', count: charCount })}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div
+                    className="flex min-w-0 flex-col gap-2 border-l border-[#1f2329] px-4 py-3"
                     onClick={(event) => event.stopPropagation()}
-                    className="cursor-pointer accent-amber-500"
-                  />
-                  <span className="font-mono text-[11px] tabular-nums text-neutral-600">
-                    {String(index + 1).padStart(3, '0')}
-                  </span>
-                  <span
-                    className={cn(
-                      'mt-auto h-1.5 w-1.5 rounded-full transition-colors',
-                      isDone ? 'bg-amber-500' : 'bg-neutral-700'
-                    )}
-                  />
-                </div>
-
-                <div
-                  className="flex min-w-0 cursor-pointer flex-col gap-2 px-4 py-3"
-                  onClick={() => focusEntry(entry.rowId)}
-                >
-                  <div className="wrap-break-word font-mono text-[13px] leading-[1.6] text-neutral-200 whitespace-pre-wrap">
-                    {entry.source ? (
-                      renderSource(entry.source)
-                    ) : (
-                      <span className="italic text-neutral-600">
-                        {t('grid.emptySource', { ns: 'translate' })}
+                  >
+                    <HighlightedTextarea
+                      ref={(element) => {
+                        if (element) textareaRefs.current.set(entry.rowId, element)
+                        else textareaRefs.current.delete(entry.rowId)
+                      }}
+                      value={entry.target}
+                      onBlur={(event) => handleEntryBlur(entry, event.target.value)}
+                      onChange={() => {}}
+                      onKeyDown={(event) => handleEnterKey(event, entry)}
+                      rows={1}
+                      placeholder={t('grid.translationPlaceholder', { ns: 'translate' })}
+                      containerClassName="rounded-md"
+                      className="field-sizing-content"
+                    />
+                    <div className="pointer-events-none flex items-center gap-1.5 opacity-0 transition-opacity duration-150 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+                      {/* <button
+                        type="button"
+                        className="inline-flex h-6 cursor-pointer items-center gap-1 rounded bg-transparent px-2 text-[11px] text-neutral-400 transition-colors hover:bg-[#1c1f24] hover:text-neutral-200"
+                      >
+                        <Sparkles size={11} /> Suggest AI
+                      </button> */}
+                      <button
+                        type="button"
+                        className="inline-flex h-6 cursor-pointer items-center gap-1 rounded bg-transparent px-2 text-[11px] text-neutral-400 transition-colors hover:bg-[#1c1f24] hover:text-neutral-200"
+                      >
+                        <BookOpen size={11} /> {t('grid.applyDictionary', { ns: 'translate' })}
+                      </button>
+                      <span className="ml-auto flex items-center gap-1 text-[11px] text-neutral-500">
+                        <KbdHint>Enter</KbdHint> {t('grid.next', { ns: 'translate' })}
+                        <span className="mx-1 text-neutral-700">-</span>
+                        <KbdHint>Shift Enter</KbdHint> {t('grid.newLine', { ns: 'translate' })}
                       </span>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {isDictionary && (
-                      <span className="inline-flex items-center gap-1 rounded bg-blue-500/12 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-blue-400">
-                        <BookOpen size={10} /> D <span className="text-blue-500/70">1</span>
-                      </span>
-                    )}
-                    <span className="font-mono text-[10px] text-neutral-600">
-                      {t('grid.charCount', { ns: 'translate', count: charCount })}
-                    </span>
+                    </div>
                   </div>
                 </div>
-
-                <div
-                  className="flex min-w-0 flex-col gap-2 border-l border-[#1f2329] px-4 py-3"
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  <HighlightedTextarea
-                    ref={(element) => {
-                      if (element) textareaRefs.current.set(entry.rowId, element)
-                      else textareaRefs.current.delete(entry.rowId)
-                    }}
-                    value={entry.target}
-                    onBlur={(event) => handleEntryBlur(entry, event.target.value)}
-                    onChange={() => {}}
-                    onKeyDown={(event) => handleEnterKey(event, entry)}
-                    rows={1}
-                    placeholder={t('grid.translationPlaceholder', { ns: 'translate' })}
-                    containerClassName="rounded-md"
-                    className="field-sizing-content"
-                  />
-                  <div className="pointer-events-none flex items-center gap-1.5 opacity-0 transition-opacity duration-150 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
-                    {/* <button
-                      type="button"
-                      className="inline-flex h-6 cursor-pointer items-center gap-1 rounded bg-transparent px-2 text-[11px] text-neutral-400 transition-colors hover:bg-[#1c1f24] hover:text-neutral-200"
-                    >
-                      <Sparkles size={11} /> Suggest AI
-                    </button> */}
-                    <button
-                      type="button"
-                      className="inline-flex h-6 cursor-pointer items-center gap-1 rounded bg-transparent px-2 text-[11px] text-neutral-400 transition-colors hover:bg-[#1c1f24] hover:text-neutral-200"
-                    >
-                      <BookOpen size={11} /> {t('grid.applyDictionary', { ns: 'translate' })}
-                    </button>
-                    <span className="ml-auto flex items-center gap-1 text-[11px] text-neutral-500">
-                      <KbdHint>Enter</KbdHint> {t('grid.next', { ns: 'translate' })}
-                      <span className="mx-1 text-neutral-700">-</span>
-                      <KbdHint>Shift Enter</KbdHint> {t('grid.newLine', { ns: 'translate' })}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )
-          })}
+              )
+            })}
+          </div>
         </div>
+
+        {PaginationFooter}
       </div>
     )
   }
@@ -466,173 +589,194 @@ export function TranslationGrid({
         </span>
       </div>
 
-      <div className="icosa-scroll min-h-0 flex-1 overflow-y-auto">
-        <div className="px-7 pb-20 pt-5">
-          <div className="mx-auto flex max-w-275 flex-col gap-3.5">
-            {filteredEntries.map((entry, index) => {
-              const category = getCategory(entry)
-              const isDone = entry.target.trim() !== ''
-              const isSelected = selectedUids.has(entry.rowId)
-              const isDictionary = category === 'dictionary'
-              const hasTags = hasXmlTags(entry)
-              const wordCount = entry.source.split(/\s+/).filter(Boolean).length
-              const charCount = entry.source.length
-              const rows = Math.max(2, Math.ceil(charCount / 70))
+      <div ref={stackedParentRef} className="icosa-scroll min-h-0 flex-1 overflow-y-auto">
+        {/* 44px = pt-5 (20px) + pb-6 (24px) added to total size so padding is preserved */}
+        <div style={{ height: stackedVirtualizer.getTotalSize() + 44, position: 'relative' }}>
+          {stackedVirtualizer.getVirtualItems().map((virtualItem) => {
+            const entry = pageEntries[virtualItem.index]
+            const category = getCategory(entry)
+            const isDone = entry.target.trim() !== ''
+            const isRowSelected = isSelected(entry.rowId)
+            const isDictionary = category === 'dictionary'
+            const hasTags = hasXmlTags(entry)
+            const wordCount = entry.source.split(/\s+/).filter(Boolean).length
+            const charCount = entry.source.length
+            const rows = Math.max(2, Math.ceil(charCount / 70))
+            const globalIndex = (currentPage - 1) * pageSize + virtualItem.index
 
-              return (
-                <div
-                  key={entry.rowId}
-                  className={cn(
-                    'group grid cursor-pointer overflow-hidden rounded-xl border transition-all duration-120',
-                    'border-[#1f2329] bg-[#0f1114]',
-                    'hover:-translate-y-px hover:border-[#2a2f37] hover:shadow-[0_4px_16px_rgba(0,0,0,0.18)]',
-                    'focus-within:border-amber-500 focus-within:shadow-[0_0_0_3px_rgba(245,158,11,0.25),0_8px_24px_rgba(0,0,0,0.24)]',
-                    isSelected && 'border-blue-700/40 bg-blue-950/10'
-                  )}
-                  style={{ gridTemplateColumns: '56px 1fr' }}
-                  onClick={() => focusEntry(entry.rowId)}
-                >
-                  <div className="flex flex-col items-center gap-3 border-r border-[#1f2329] bg-[#0c0d0f] py-4.5">
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={(event) => selectEntry(entry.rowId, event.target.checked)}
-                      onClick={(event) => event.stopPropagation()}
-                      className="cursor-pointer accent-amber-500"
-                    />
+            return (
+              <div
+                key={entry.rowId}
+                data-index={virtualItem.index}
+                ref={stackedVirtualizer.measureElement}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  // 20px offset = pt-5 top padding
+                  transform: `translateY(${virtualItem.start + 20}px)`,
+                  paddingLeft: '28px',
+                  paddingRight: '28px',
+                  paddingBottom: '14px',
+                }}
+              >
+                <div className="mx-auto max-w-275">
+                  <div
+                    className={cn(
+                      'group grid cursor-pointer overflow-hidden rounded-xl border transition-all duration-120',
+                      'border-[#1f2329] bg-[#0f1114]',
+                      'hover:-translate-y-px hover:border-[#2a2f37] hover:shadow-[0_4px_16px_rgba(0,0,0,0.18)]',
+                      'focus-within:border-amber-500 focus-within:shadow-[0_0_0_3px_rgba(245,158,11,0.25),0_8px_24px_rgba(0,0,0,0.24)]',
+                      isRowSelected && 'border-blue-700/40 bg-blue-950/10'
+                    )}
+                    style={{ gridTemplateColumns: '56px 1fr' }}
+                    onClick={() => focusEntry(entry.rowId)}
+                  >
+                    <div className="flex flex-col items-center gap-3 border-r border-[#1f2329] bg-[#0c0d0f] py-4.5">
+                      <input
+                        type="checkbox"
+                        checked={isRowSelected}
+                        onChange={() => toggleEntry(entry.rowId)}
+                        onClick={(event) => event.stopPropagation()}
+                        className="cursor-pointer accent-amber-500"
+                      />
 
-                    <span
-                      className="mt-auto font-mono text-[11px] tracking-widest text-neutral-600"
-                      style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
-                    >
-                      #{String(index + 1).padStart(3, '0')}
-                    </span>
+                      <span
+                        className="mt-auto font-mono text-[11px] tracking-widest text-neutral-600"
+                        style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+                      >
+                        #{String(globalIndex + 1).padStart(3, '0')}
+                      </span>
+
+                      <div
+                        className={cn(
+                          'flex h-5.5 w-5.5 items-center justify-center rounded-full border transition-colors',
+                          isDone
+                            ? 'border-amber-500 bg-amber-500 text-white'
+                            : 'border-[#1f2329] bg-[#131518]'
+                        )}
+                      >
+                        {isDone ? (
+                          <Check size={11} strokeWidth={2.5} />
+                        ) : (
+                          <span className="h-1.5 w-1.5 rounded-full bg-neutral-600" />
+                        )}
+                      </div>
+                    </div>
 
                     <div
-                      className={cn(
-                        'flex h-5.5 w-5.5 items-center justify-center rounded-full border transition-colors',
-                        isDone
-                          ? 'border-amber-500 bg-amber-500 text-white'
-                          : 'border-[#1f2329] bg-[#131518]'
-                      )}
+                      className="flex flex-col gap-3 px-5.5 py-4.5"
+                      onClick={(event) => event.stopPropagation()}
                     >
-                      {isDone ? (
-                        <Check size={11} strokeWidth={2.5} />
-                      ) : (
-                        <span className="h-1.5 w-1.5 rounded-full bg-neutral-600" />
-                      )}
-                    </div>
-                  </div>
-
-                  <div
-                    className="flex flex-col gap-3 px-5.5 py-4.5"
-                    onClick={(event) => event.stopPropagation()}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <LangTag>{sourceLang.toUpperCase()}</LangTag>
-                      <span className="font-mono text-[10px] tracking-[0.02em] text-neutral-600">
-                        {t('grid.wordAndCharCount', {
-                          ns: 'translate',
-                          chars: charCount,
-                          words: wordCount
-                        })}
-                      </span>
-                      <span className="flex-1" />
-                      {isDictionary && (
-                        <span className="inline-flex items-center gap-1 rounded bg-blue-500/12 px-2 py-0.5 text-[11px] font-medium text-blue-400">
-                          <BookOpen size={11} />
-                          {entry.matchType === 'mod-text'
-                            ? t('grid.dictionaryTagMod', { ns: 'translate' })
-                            : t('grid.dictionaryTag', { ns: 'translate' })}
+                      <div className="flex items-center gap-2.5">
+                        <LangTag>{sourceLang.toUpperCase()}</LangTag>
+                        <span className="font-mono text-[10px] tracking-[0.02em] text-neutral-600">
+                          {t('grid.wordAndCharCount', {
+                            ns: 'translate',
+                            chars: charCount,
+                            words: wordCount
+                          })}
                         </span>
-                      )}
-                      {hasTags && (
-                        <span className="inline-flex items-center gap-1 rounded bg-purple-500/14 px-2 py-0.5 text-[11px] font-medium text-purple-300">
-                          <AlertTriangle size={11} /> {t('grid.containsTags', { ns: 'translate' })}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="wrap-break-word font-mono text-[14px] leading-[1.65] text-neutral-200 whitespace-pre-wrap">
-                      {entry.source ? (
-                        renderSource(entry.source)
-                      ) : (
-                        <span className="italic text-neutral-600">
-                          {t('grid.emptySource', { ns: 'translate' })}
-                        </span>
-                      )}
-                    </div>
-
-                    {isDictionary && (
-                      <div className="hidden flex-wrap items-center gap-2 rounded-lg border border-dashed border-[#2a2f37] bg-[#0c0d0f] px-3 py-2 group-focus-within:flex">
-                        <span className="text-[11px] font-semibold tracking-[0.08em] text-neutral-500 uppercase">
-                          {t('grid.dictionarySuggestion', { ns: 'translate' })}
-                        </span>
-                        <button
-                          type="button"
-                          className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-[#1f2329] bg-[#0f1114] px-2.5 py-0.5 text-[12px] transition-colors hover:border-amber-500 hover:bg-amber-500/10"
-                          onClick={() => {
-                            onEntryChange(entry.rowId, entry.target)
-                          }}
-                        >
-                          <span className="font-mono text-neutral-400">
-                            {entry.source.slice(0, 24)}
-                            {entry.source.length > 24 ? '...' : ''}
-                          </span>
-                          <span className="text-neutral-600">-&gt;</span>
-                          <span className="font-medium text-neutral-200">
-                            {entry.target || '-'}
-                          </span>
-                        </button>
-                      </div>
-                    )}
-
-                    <div className="mt-1 flex items-center gap-2.5 border-t border-dashed border-[#1f2329] pt-1">
-                      <LangTag accent>{targetLang.toUpperCase()}</LangTag>
-                      <div className="pointer-events-none flex flex-1 items-center gap-1.5 opacity-0 transition-opacity duration-150 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
-                        {/* <button
-                          type="button"
-                          className="inline-flex h-6 cursor-pointer items-center gap-1 rounded bg-transparent px-2 text-[11px] text-neutral-400 transition-colors hover:bg-[#1c1f24] hover:text-neutral-200"
-                        >
-                          <Sparkles size={11} /> Suggest AI
-                        </button> */}
-                        <button
-                          type="button"
-                          className="inline-flex h-6 cursor-pointer items-center gap-1 rounded bg-transparent px-2 text-[11px] text-neutral-400 transition-colors hover:bg-[#1c1f24] hover:text-neutral-200"
-                        >
-                          <Check size={11} /> {t('grid.markTranslated', { ns: 'translate' })}
-                        </button>
                         <span className="flex-1" />
-                        <span className="flex items-center gap-1 text-[11px] text-neutral-500">
-                          <KbdHint>Enter</KbdHint> {t('grid.next', { ns: 'translate' })}
-                          <span className="mx-0.5 text-neutral-700">-</span>
-                          <KbdHint>Shift Enter</KbdHint> {t('grid.newLine', { ns: 'translate' })}
-                        </span>
+                        {isDictionary && (
+                          <span className="inline-flex items-center gap-1 rounded bg-blue-500/12 px-2 py-0.5 text-[11px] font-medium text-blue-400">
+                            <BookOpen size={11} />
+                            {entry.matchType === 'mod-text'
+                              ? t('grid.dictionaryTagMod', { ns: 'translate' })
+                              : t('grid.dictionaryTag', { ns: 'translate' })}
+                          </span>
+                        )}
+                        {hasTags && (
+                          <span className="inline-flex items-center gap-1 rounded bg-purple-500/14 px-2 py-0.5 text-[11px] font-medium text-purple-300">
+                            <AlertTriangle size={11} /> {t('grid.containsTags', { ns: 'translate' })}
+                          </span>
+                        )}
                       </div>
-                    </div>
 
-                    <HighlightedTextarea
-                      ref={(element) => {
-                        if (element) textareaRefs.current.set(entry.rowId, element)
-                        else textareaRefs.current.delete(entry.rowId)
-                      }}
-                      value={entry.target}
-                      onBlur={(event) => handleEntryBlur(entry, event.target.value)}
-                      onChange={() => {}}
-                      onKeyDown={(event) => handleEnterKey(event, entry)}
-                      rows={rows}
-                      placeholder={isDone ? '' : t('grid.startTyping', { ns: 'translate' })}
-                      containerClassName="min-h-11 rounded-lg border-[#1f2329] bg-[#0c0d0f] focus-within:border-amber-500 focus-within:shadow-[0_0_0_3px_rgba(245,158,11,0.25)]"
-                      overlayClassName="px-3.5 py-3 text-[13px] leading-[1.6]"
-                      className="min-h-11 px-3.5 py-3 text-[13px] leading-[1.6]"
-                    />
+                      <div className="wrap-break-word font-mono text-[14px] leading-[1.65] text-neutral-200 whitespace-pre-wrap">
+                        {entry.source ? (
+                          renderSource(entry.source)
+                        ) : (
+                          <span className="italic text-neutral-600">
+                            {t('grid.emptySource', { ns: 'translate' })}
+                          </span>
+                        )}
+                      </div>
+
+                      {isDictionary && (
+                        <div className="hidden flex-wrap items-center gap-2 rounded-lg border border-dashed border-[#2a2f37] bg-[#0c0d0f] px-3 py-2 group-focus-within:flex">
+                          <span className="text-[11px] font-semibold tracking-[0.08em] text-neutral-500 uppercase">
+                            {t('grid.dictionarySuggestion', { ns: 'translate' })}
+                          </span>
+                          <button
+                            type="button"
+                            className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-[#1f2329] bg-[#0f1114] px-2.5 py-0.5 text-[12px] transition-colors hover:border-amber-500 hover:bg-amber-500/10"
+                            onClick={() => {
+                              onEntryChange(entry.rowId, entry.target)
+                            }}
+                          >
+                            <span className="font-mono text-neutral-400">
+                              {entry.source.slice(0, 24)}
+                              {entry.source.length > 24 ? '...' : ''}
+                            </span>
+                            <span className="text-neutral-600">-&gt;</span>
+                            <span className="font-medium text-neutral-200">
+                              {entry.target || '-'}
+                            </span>
+                          </button>
+                        </div>
+                      )}
+
+                      <div className="mt-1 flex items-center gap-2.5 border-t border-dashed border-[#1f2329] pt-1">
+                        <LangTag accent>{targetLang.toUpperCase()}</LangTag>
+                        <div className="pointer-events-none flex flex-1 items-center gap-1.5 opacity-0 transition-opacity duration-150 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+                          {/* <button
+                            type="button"
+                            className="inline-flex h-6 cursor-pointer items-center gap-1 rounded bg-transparent px-2 text-[11px] text-neutral-400 transition-colors hover:bg-[#1c1f24] hover:text-neutral-200"
+                          >
+                            <Sparkles size={11} /> Suggest AI
+                          </button> */}
+                          <button
+                            type="button"
+                            className="inline-flex h-6 cursor-pointer items-center gap-1 rounded bg-transparent px-2 text-[11px] text-neutral-400 transition-colors hover:bg-[#1c1f24] hover:text-neutral-200"
+                          >
+                            <Check size={11} /> {t('grid.markTranslated', { ns: 'translate' })}
+                          </button>
+                          <span className="flex-1" />
+                          <span className="flex items-center gap-1 text-[11px] text-neutral-500">
+                            <KbdHint>Enter</KbdHint> {t('grid.next', { ns: 'translate' })}
+                            <span className="mx-0.5 text-neutral-700">-</span>
+                            <KbdHint>Shift Enter</KbdHint> {t('grid.newLine', { ns: 'translate' })}
+                          </span>
+                        </div>
+                      </div>
+
+                      <HighlightedTextarea
+                        ref={(element) => {
+                          if (element) textareaRefs.current.set(entry.rowId, element)
+                          else textareaRefs.current.delete(entry.rowId)
+                        }}
+                        value={entry.target}
+                        onBlur={(event) => handleEntryBlur(entry, event.target.value)}
+                        onChange={() => {}}
+                        onKeyDown={(event) => handleEnterKey(event, entry)}
+                        rows={rows}
+                        placeholder={isDone ? '' : t('grid.startTyping', { ns: 'translate' })}
+                        containerClassName="min-h-11 rounded-lg border-[#1f2329] bg-[#0c0d0f] focus-within:border-amber-500 focus-within:shadow-[0_0_0_3px_rgba(245,158,11,0.25)]"
+                        overlayClassName="px-3.5 py-3 text-[13px] leading-[1.6]"
+                        className="min-h-11 px-3.5 py-3 text-[13px] leading-[1.6]"
+                      />
+                    </div>
                   </div>
                 </div>
-              )
-            })}
-          </div>
+              </div>
+            )
+          })}
         </div>
       </div>
+
+      {PaginationFooter}
     </div>
   )
 }

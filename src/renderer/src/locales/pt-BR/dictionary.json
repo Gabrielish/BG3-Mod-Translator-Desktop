@@ -40,7 +40,11 @@
   },
   "selection": {
     "none": "Nenhuma seleção",
-    "count": "{{count}} selecionadas"
+    "count": "{{count}} selecionadas",
+    "pageSelected": "Selecionadas as {{pageSize}} linhas desta página.",
+    "selectAllMatching": "Selecionar todas as {{total}} correspondentes",
+    "allMatchingSelected": "Todas as {{total}} linhas correspondentes selecionadas.",
+    "clear": "Limpar seleção"
   },
   "actions": {
     "exportCsv": "Exportar CSV",
