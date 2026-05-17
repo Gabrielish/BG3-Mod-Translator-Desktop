@@ -84,15 +84,16 @@ export class DictionaryRepository {
   ): DictionaryEntry | undefined {
     const [l1, l2, swapped] = normalizeLangs(sourceLang, targetLang)
     const sourceKey = dictionaryTextKey(sourceText)
+    const keyColumn = swapped ? dictionary.textLanguage2Key : dictionary.textLanguage1Key
 
-    const rows = this.db
+    return this.db
       .select()
       .from(dictionary)
-      .where(and(eq(dictionary.language1, l1), eq(dictionary.language2, l2)))
+      .where(
+        and(eq(dictionary.language1, l1), eq(dictionary.language2, l2), eq(keyColumn, sourceKey))
+      )
       .orderBy(desc(dictionary.updatedAt), desc(dictionary.id))
-      .all() as DictionaryEntry[]
-
-    return rows.find((entry) => this.sourceTextKey(entry, swapped) === sourceKey)
+      .get() as DictionaryEntry | undefined
   }
 
   findByModAndText(
@@ -104,21 +105,21 @@ export class DictionaryRepository {
     const [l1, l2, swapped] = normalizeLangs(sourceLang, targetLang)
     const sourceKey = dictionaryTextKey(sourceText)
     const normalizedMod = modName.toLowerCase()
+    const keyColumn = swapped ? dictionary.textLanguage2Key : dictionary.textLanguage1Key
 
-    const rows = this.db
+    return this.db
       .select()
       .from(dictionary)
       .where(
         and(
           eq(dictionary.language1, l1),
           eq(dictionary.language2, l2),
-          sql`lower(coalesce(${dictionary.modName}, '')) = ${normalizedMod}`
+          sql`lower(coalesce(${dictionary.modName}, '')) = ${normalizedMod}`,
+          eq(keyColumn, sourceKey)
         )
       )
       .orderBy(desc(dictionary.updatedAt), desc(dictionary.id))
-      .all() as DictionaryEntry[]
-
-    return rows.find((entry) => this.sourceTextKey(entry, swapped) === sourceKey)
+      .get() as DictionaryEntry | undefined
   }
 
   findByModUidAndText(
@@ -131,8 +132,9 @@ export class DictionaryRepository {
     const [l1, l2, swapped] = normalizeLangs(sourceLang, targetLang)
     const sourceKey = dictionaryTextKey(sourceText)
     const normalizedMod = modName.toLowerCase()
+    const keyColumn = swapped ? dictionary.textLanguage2Key : dictionary.textLanguage1Key
 
-    const rows = this.db
+    return this.db
       .select()
       .from(dictionary)
       .where(
@@ -140,13 +142,12 @@ export class DictionaryRepository {
           eq(dictionary.language1, l1),
           eq(dictionary.language2, l2),
           sql`lower(coalesce(${dictionary.modName}, '')) = ${normalizedMod}`,
-          eq(dictionary.uid, uid)
+          eq(dictionary.uid, uid),
+          eq(keyColumn, sourceKey)
         )
       )
       .orderBy(desc(dictionary.updatedAt), desc(dictionary.id))
-      .all() as DictionaryEntry[]
-
-    return rows.find((entry) => this.sourceTextKey(entry, swapped) === sourceKey)
+      .get() as DictionaryEntry | undefined
   }
 
   resolveMatch(params: {
@@ -245,6 +246,80 @@ export class DictionaryRepository {
     this.create(params)
   }
 
+  loadKeyMap(
+    sourceLang: string,
+    targetLang: string,
+    modName: string
+  ): Map<string, { id: number; targetKey: string; uid: string | null }> {
+    const [l1, l2, swapped] = normalizeLangs(sourceLang, targetLang)
+    const normalizedMod = modName.toLowerCase()
+
+    const rows = this.db
+      .select({
+        id: dictionary.id,
+        uid: dictionary.uid,
+        key1: dictionary.textLanguage1Key,
+        key2: dictionary.textLanguage2Key
+      })
+      .from(dictionary)
+      .where(
+        and(
+          eq(dictionary.language1, l1),
+          eq(dictionary.language2, l2),
+          sql`lower(coalesce(${dictionary.modName}, '')) = ${normalizedMod}`
+        )
+      )
+      .all() as { id: number; uid: string | null; key1: string; key2: string }[]
+
+    const map = new Map<string, { id: number; targetKey: string; uid: string | null }>()
+    for (const row of rows) {
+      const sourceKey = swapped ? row.key2 : row.key1
+      const targetKey = swapped ? row.key1 : row.key2
+      map.set(sourceKey, { id: row.id, targetKey, uid: row.uid })
+    }
+    return map
+  }
+
+  // Multi-row VALUES INSERT in a single transaction. Chunks internally so the bound
+  // parameter count stays under SQLite's 999-param cap (8 cols * 100 rows = 800).
+  bulkInsert(rows: NewDictionaryEntry[]): void {
+    if (rows.length === 0) return
+    const CHUNK_SIZE = 100
+
+    this.db.transaction((tx) => {
+      for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
+        const chunk = rows.slice(i, i + CHUNK_SIZE)
+        tx.insert(dictionary).values(chunk).run()
+      }
+    })
+  }
+
+  // Per-row UPDATE in a single transaction. uid is COALESCEd so null leaves it untouched.
+  bulkUpdate(
+    updates: { id: number; targetText: string; targetTextKey: string; uid: string | null }[],
+    column: 'language1' | 'language2' = 'language2'
+  ): void {
+    if (updates.length === 0) return
+
+    this.db.transaction((tx) => {
+      for (const u of updates) {
+        const setPayload =
+          column === 'language1'
+            ? { textLanguage1: u.targetText, textLanguage1Key: u.targetTextKey }
+            : { textLanguage2: u.targetText, textLanguage2Key: u.targetTextKey }
+
+        tx.update(dictionary)
+          .set({
+            ...setPayload,
+            uid: sql`COALESCE(${u.uid}, ${dictionary.uid})`,
+            updatedAt: sql`(datetime('now'))`
+          })
+          .where(eq(dictionary.id, u.id))
+          .run()
+      }
+    })
+  }
+
   getAll(lang1: string, lang2: string): DictionaryEntry[] {
     const [l1, l2] = normalizeLangs(lang1, lang2)
     return this.db
@@ -324,7 +399,9 @@ export class DictionaryRepository {
       const finalWhere = filterWhere ? (and(filterWhere, likeWhere) as SQL) : likeWhere
       const result = this.db
         .update(dictionary)
-        .set({ textLanguage1: sql`replace(${dictionary.textLanguage1}, ${findText}, ${replaceText})` })
+        .set({
+          textLanguage1: sql`replace(${dictionary.textLanguage1}, ${findText}, ${replaceText})`
+        })
         .where(finalWhere)
         .run() as { changes: number }
       return { updated: result.changes }
@@ -334,7 +411,9 @@ export class DictionaryRepository {
     const finalWhere = filterWhere ? (and(filterWhere, likeWhere) as SQL) : likeWhere
     const result = this.db
       .update(dictionary)
-      .set({ textLanguage2: sql`replace(${dictionary.textLanguage2}, ${findText}, ${replaceText})` })
+      .set({
+        textLanguage2: sql`replace(${dictionary.textLanguage2}, ${findText}, ${replaceText})`
+      })
       .where(finalWhere)
       .run() as { changes: number }
     return { updated: result.changes }
@@ -403,21 +482,21 @@ export class DictionaryRepository {
   ): DictionaryEntry | undefined {
     const [l1, l2, swapped] = normalizeLangs(sourceLang, targetLang)
     const sourceKey = dictionaryTextKey(sourceText)
+    const keyColumn = swapped ? dictionary.textLanguage2Key : dictionary.textLanguage1Key
 
-    const rows = this.db
+    return this.db
       .select()
       .from(dictionary)
       .where(
         and(
           eq(dictionary.language1, l1),
           eq(dictionary.language2, l2),
-          sql`${dictionary.modName} is null`
+          sql`${dictionary.modName} is null`,
+          eq(keyColumn, sourceKey)
         )
       )
       .orderBy(desc(dictionary.updatedAt), desc(dictionary.id))
-      .all() as DictionaryEntry[]
-
-    return rows.find((entry) => this.sourceTextKey(entry, swapped) === sourceKey)
+      .get() as DictionaryEntry | undefined
   }
 
   private findUnscopedByUidAndText(
@@ -428,8 +507,9 @@ export class DictionaryRepository {
   ): DictionaryEntry | undefined {
     const [l1, l2, swapped] = normalizeLangs(sourceLang, targetLang)
     const sourceKey = dictionaryTextKey(sourceText)
+    const keyColumn = swapped ? dictionary.textLanguage2Key : dictionary.textLanguage1Key
 
-    const rows = this.db
+    return this.db
       .select()
       .from(dictionary)
       .where(
@@ -437,13 +517,12 @@ export class DictionaryRepository {
           eq(dictionary.language1, l1),
           eq(dictionary.language2, l2),
           sql`${dictionary.modName} is null`,
-          eq(dictionary.uid, uid)
+          eq(dictionary.uid, uid),
+          eq(keyColumn, sourceKey)
         )
       )
       .orderBy(desc(dictionary.updatedAt), desc(dictionary.id))
-      .all() as DictionaryEntry[]
-
-    return rows.find((entry) => this.sourceTextKey(entry, swapped) === sourceKey)
+      .get() as DictionaryEntry | undefined
   }
 
   private toValues(params: UpsertParams): NewDictionaryEntry {
@@ -457,12 +536,10 @@ export class DictionaryRepository {
       language2: l2,
       textLanguage1: text1,
       textLanguage2: text2,
+      textLanguage1Key: dictionaryTextKey(text1),
+      textLanguage2Key: dictionaryTextKey(text2),
       modName: params.modName?.trim() || null,
       uid: params.uid?.trim() || null
     }
-  }
-
-  private sourceTextKey(entry: DictionaryEntry, swapped: boolean): string {
-    return dictionaryTextKey(swapped ? entry.textLanguage2 : entry.textLanguage1)
   }
 }

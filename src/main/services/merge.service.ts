@@ -1,6 +1,12 @@
+import path from 'node:path'
+import { Worker } from 'node:worker_threads'
+import { app } from 'electron'
 import type { RepositoryRegistry } from '../database/repositories/registry'
-import { normalizeDictionaryText } from '../utils/dictionaryText'
-import { type LocalizationEntry, parseLocalizationXml } from './xml-parser.service'
+import type { MergeProgress, MergeResult, MergeWorkerInput } from '../workers/merge.worker.runtime'
+
+export type { MergeResult }
+
+export type MergeProgressUpdate = Exclude<MergeProgress, { phase: 'done' } | { phase: 'error' }>
 
 export interface MergeXmlsParams {
   sourceXmlPath: string
@@ -8,73 +14,40 @@ export interface MergeXmlsParams {
   targetXmlPath: string
   targetLang: string
   modName: string
+  onProgress?: (p: MergeProgressUpdate) => void
 }
 
-export interface MergeResult {
-  matched: number
-  sourceOnly: number
-  targetOnly: number
-}
+// repos is kept on the signature so the current IPC handler keeps compiling -
+// task 04 drops it when it rewires merge.ipc.ts for the progress channel.
+export function mergeXmls(
+  _repos: RepositoryRegistry,
+  params: MergeXmlsParams
+): Promise<MergeResult> {
+  const { onProgress, ...rest } = params
+  const input: MergeWorkerInput = { ...rest, dbPath: getDbPath() }
 
-export function mergeXmls(repos: RepositoryRegistry, params: MergeXmlsParams): MergeResult {
-  const sourceEntries = parseLocalizationXml(params.sourceXmlPath)
-  const targetEntries = parseLocalizationXml(params.targetXmlPath)
+  return new Promise<MergeResult>((resolve, reject) => {
+    const worker = new Worker(path.join(__dirname, 'merge.worker.js'), { workerData: input })
 
-  const targetBuckets = groupByUid(targetEntries)
-
-  // Mod must exist before dictionary entries reference it via FK (modName -> mod.name).
-  repos.mod.upsert(params.modName)
-
-  let matched = 0
-  for (const sourceEntry of sourceEntries) {
-    const targetEntry = targetBuckets.get(sourceEntry.contentuid)?.shift()
-    if (!targetEntry) continue
-
-    const sourceText = normalizeDictionaryText(sourceEntry.text)
-    const targetText = normalizeDictionaryText(targetEntry.text)
-    if (!sourceText || !targetText) continue
-
-    repos.dictionary.upsert({
-      sourceLang: params.sourceLang,
-      targetLang: params.targetLang,
-      sourceText,
-      targetText,
-      modName: params.modName,
-      uid: sourceEntry.contentuid
+    worker.on('message', (msg: MergeProgress) => {
+      if (msg.phase === 'done') {
+        resolve(msg.result)
+        return
+      }
+      if (msg.phase === 'error') {
+        reject(new Error(msg.message))
+        return
+      }
+      onProgress?.(msg)
     })
-    matched++
-  }
 
-  const sourceOnly = countMissingOccurrences(sourceEntries, targetEntries)
-  const targetOnly = countMissingOccurrences(targetEntries, sourceEntries)
-
-  if (matched > 0) {
-    repos.mod.upsert(params.modName, { totalStrings: matched })
-  }
-
-  return { matched, sourceOnly, targetOnly }
+    worker.on('error', reject)
+    worker.on('exit', (code) => {
+      if (code !== 0) reject(new Error(`merge worker exited with code ${code}`))
+    })
+  })
 }
 
-function groupByUid(entries: LocalizationEntry[]): Map<string, LocalizationEntry[]> {
-  const buckets = new Map<string, LocalizationEntry[]>()
-  for (const entry of entries) {
-    const bucket = buckets.get(entry.contentuid) ?? []
-    bucket.push(entry)
-    buckets.set(entry.contentuid, bucket)
-  }
-  return buckets
-}
-
-function countMissingOccurrences(a: LocalizationEntry[], b: LocalizationEntry[]): number {
-  const aCounts = countUids(a)
-  const bCounts = countUids(b)
-  let count = 0
-  for (const [uid, total] of aCounts) count += Math.max(0, total - (bCounts.get(uid) ?? 0))
-  return count
-}
-
-function countUids(entries: LocalizationEntry[]): Map<string, number> {
-  const counts = new Map<string, number>()
-  for (const entry of entries) counts.set(entry.contentuid, (counts.get(entry.contentuid) ?? 0) + 1)
-  return counts
+function getDbPath(): string {
+  return path.join(app.getPath('userData'), 'icosa.db')
 }

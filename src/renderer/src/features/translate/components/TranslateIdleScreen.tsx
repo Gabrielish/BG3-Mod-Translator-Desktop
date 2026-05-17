@@ -25,10 +25,24 @@ export function TranslateIdleScreen({ session }: TranslateIdleScreenProps): Reac
     modName: setup.modName
   })
   const isLoading = session.phase === 'loading' || importFlow.isPreparing
-  const loadingLabel =
+  const baseLabel =
     importFlow.isPreparing && session.phase !== 'loading'
       ? t('setup.loadingPreparingFile', { ns: 'translate' })
       : session.loadingLabel || t('setup.loadingEditor', { ns: 'translate' })
+  const loadingProgress = session.loadingProgress
+  const loadingLabel = (() => {
+    if (!loadingProgress || importFlow.isPreparing) return baseLabel
+    if (loadingProgress.phase === 'unpacking')
+      return t('setup.loadingUnpacking', { ns: 'translate' })
+    if (loadingProgress.phase === 'parsing') return t('setup.loadingParsing', { ns: 'translate' })
+    if (loadingProgress.phase === 'matching')
+      return t('setup.loadingMatching', {
+        ns: 'translate',
+        processed: loadingProgress.processed.toLocaleString(),
+        total: loadingProgress.total.toLocaleString()
+      })
+    return baseLabel
+  })()
 
   return (
     <>
@@ -173,7 +187,16 @@ export function TranslateIdleScreen({ session }: TranslateIdleScreenProps): Reac
               </div>
               <div className="space-y-2">
                 <div className="h-2 rounded-full bg-[#1d2127]">
-                  <div className="h-full w-2/3 animate-pulse rounded-full bg-amber-400/80" />
+                  {loadingProgress?.phase === 'matching' && loadingProgress.total > 0 ? (
+                    <div
+                      className="h-full rounded-full bg-amber-400/80 transition-[width] duration-200"
+                      style={{
+                        width: `${(loadingProgress.processed / loadingProgress.total) * 100}%`
+                      }}
+                    />
+                  ) : (
+                    <div className="h-full w-2/3 animate-pulse rounded-full bg-amber-400/80" />
+                  )}
                 </div>
                 <div className="grid gap-2">
                   <div className="h-8 animate-pulse rounded-lg bg-[#1a1d22]" />

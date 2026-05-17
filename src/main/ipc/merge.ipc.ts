@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { ipcMain, type WebContents } from 'electron'
 import type { RepositoryRegistry } from '../database/repositories/registry'
 import { type MergeResult, mergeXmls } from '../services/merge.service'
 import {
@@ -26,7 +26,11 @@ interface RunMergePayload {
   modName: string
 }
 
-async function runMerge(repos: RepositoryRegistry, payload: RunMergePayload): Promise<MergeResult> {
+async function runMerge(
+  repos: RepositoryRegistry,
+  sender: WebContents,
+  payload: RunMergePayload
+): Promise<MergeResult> {
   const sourceCandidate = getStagedCandidate(payload.sourceImportId, payload.sourceCandidateId)
   const targetCandidate = getStagedCandidate(payload.targetImportId, payload.targetCandidateId)
 
@@ -47,7 +51,8 @@ async function runMerge(repos: RepositoryRegistry, payload: RunMergePayload): Pr
       sourceLang: payload.sourceLang,
       targetXmlPath: targetCandidate.absolutePath,
       targetLang: payload.targetLang,
-      modName
+      modName,
+      onProgress: (p) => sender.send('merge:progress', p)
     })
   } finally {
     discardTranslationInput(payload.sourceImportId)
@@ -72,6 +77,7 @@ export function registerMergeHandlers(repos: RepositoryRegistry): void {
 
   ipcMain.handle(
     'merge:run',
-    async (_event, payload: RunMergePayload): Promise<MergeResult> => runMerge(repos, payload)
+    async (event, payload: RunMergePayload): Promise<MergeResult> =>
+      runMerge(repos, event.sender, payload)
   )
 }

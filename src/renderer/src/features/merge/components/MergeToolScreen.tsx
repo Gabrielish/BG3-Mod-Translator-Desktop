@@ -1,6 +1,6 @@
 import { Merge } from 'lucide-react'
-import { useAppTranslation } from '@/i18n/useAppTranslation'
 import { XmlSelectionModal } from '@/features/translate/components/XmlSelectionModal'
+import { useAppTranslation } from '@/i18n/useAppTranslation'
 import type { PreparedTranslationInput } from '@/types'
 import { useMergeSetup } from '../hooks/useMergeSetup'
 import type { SlotKey } from '../types'
@@ -80,6 +80,7 @@ export function MergeToolScreen(): React.JSX.Element {
         <MergeBottomBar
           ready={setup.ready}
           isRunning={setup.isRunning}
+          progress={setup.progress}
           onCancel={() => {
             void setup.reset()
           }}

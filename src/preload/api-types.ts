@@ -318,6 +318,14 @@ export interface MergeResult {
   targetOnly: number
 }
 
+export type MergeProgress =
+  | { phase: 'parsing' }
+  | { phase: 'loading-map' }
+  | { phase: 'classifying' }
+  | { phase: 'writing'; processed: number; total: number }
+  | { phase: 'done'; result: MergeResult }
+  | { phase: 'error'; message: string }
+
 export interface MergeApi {
   prepareInput(params: { inputPath: string }): Promise<PreparedTranslationInput>
   discardInput(params: { importId: string }): Promise<{ success: boolean }>
@@ -330,7 +338,13 @@ export interface MergeApi {
     targetLang: string
     modName: string
   }): Promise<MergeResult>
+  onProgress(cb: (data: MergeProgress) => void): UnsubscribeFn
 }
+
+export type XmlLoadProgress =
+  | { phase: 'unpacking' }
+  | { phase: 'parsing' }
+  | { phase: 'matching'; processed: number; total: number }
 
 export interface XmlApi {
   load(params: {
@@ -340,6 +354,7 @@ export interface XmlApi {
     modName?: string
   }): Promise<XmlEntry[]>
   export(params: { outputPath: string; entries: XmlEntry[] }): Promise<void>
+  onLoadProgress(cb: (data: XmlLoadProgress) => void): UnsubscribeFn
 }
 
 export interface ConfigApi {

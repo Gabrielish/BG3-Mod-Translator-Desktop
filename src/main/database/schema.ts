@@ -1,5 +1,5 @@
-import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core'
 import { sql } from 'drizzle-orm'
+import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 
 const timestamps = {
   createdAt: text('created_at').default(sql`(datetime('now'))`),
@@ -55,6 +55,8 @@ export const dictionary = sqliteTable(
       .references(() => language.code),
     textLanguage1: text('text_language1').notNull(),
     textLanguage2: text('text_language2').notNull(),
+    textLanguage1Key: text('text_language1_key').notNull().default(''),
+    textLanguage2Key: text('text_language2_key').notNull().default(''),
     modName: text('mod_name').references(() => mod.name),
     uid: text('uid'),
     ...timestamps
@@ -66,7 +68,20 @@ export const dictionary = sqliteTable(
       table.language2,
       table.modName
     ),
-    dictionary_mod_idx: index('dictionary_mod_idx').on(table.modName)
+    dictionary_mod_idx: index('dictionary_mod_idx').on(table.modName),
+    dictionary_match_idx: index('dictionary_match_idx').on(
+      table.language1,
+      table.language2,
+      table.modName,
+      table.textLanguage1Key
+    ),
+    dictionary_match_uid_idx: index('dictionary_match_uid_idx').on(
+      table.language1,
+      table.language2,
+      table.modName,
+      table.uid,
+      table.textLanguage1Key
+    )
   })
 )
 

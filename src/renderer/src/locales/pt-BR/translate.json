@@ -49,7 +49,10 @@
     "loadingEntries": "Carregando entradas do XML...",
     "loadingModData": "Atualizando dados do mod...",
     "loadingPreparingFile": "Preparando arquivo para abrir o editor...",
-    "loadingEditor": "Carregando editor de tradução..."
+    "loadingEditor": "Carregando editor de tradução...",
+    "loadingUnpacking": "Descompactando arquivos do mod…",
+    "loadingParsing": "Lendo XML de localização…",
+    "loadingMatching": "Comparando dicionário {{processed}} / {{total}}"
   },
   "routeSkeleton": {
     "header": "Carregando área de tradução"

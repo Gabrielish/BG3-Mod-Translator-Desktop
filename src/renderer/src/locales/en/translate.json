@@ -49,7 +49,10 @@
     "loadingEntries": "Loading XML entries...",
     "loadingModData": "Updating mod data...",
     "loadingPreparingFile": "Preparing file to open the editor...",
-    "loadingEditor": "Loading translation editor..."
+    "loadingEditor": "Loading translation editor...",
+    "loadingUnpacking": "Unpacking mod files…",
+    "loadingParsing": "Parsing localization XML…",
+    "loadingMatching": "Matching dictionary {{processed}} / {{total}}"
   },
   "routeSkeleton": {
     "header": "Loading translation workspace"

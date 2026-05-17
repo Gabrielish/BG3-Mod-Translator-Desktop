@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { getLocalizedErrorMessage } from '@/i18n/errors'
 import { useAppTranslation } from '@/i18n/useAppTranslation'
-import type { Language, MergeResult, PreparedTranslationInput } from '@/types'
+import type { Language, MergeProgress, MergeResult, PreparedTranslationInput } from '@/types'
 import type { MergeFileSlot, SlotKey } from '../types'
 
 const ACCEPTED_EXT = ['xml', 'pak', 'zip']
@@ -37,6 +37,7 @@ interface UseMergeSetupResult {
   languages: Language[]
   ready: boolean
   isRunning: boolean
+  progress: MergeProgress | null
   pendingSelection: SlotKey | null
   step1Done: boolean
   step2Done: boolean
@@ -61,7 +62,13 @@ export function useMergeSetup(): UseMergeSetupResult {
   const [modName, setModName] = useState('')
   const [languages, setLanguages] = useState<Language[]>([])
   const [isRunning, setIsRunning] = useState(false)
+  const [progress, setProgress] = useState<MergeProgress | null>(null)
   const [pendingSelection, setPendingSelection] = useState<SlotKey | null>(null)
+
+  useEffect(() => {
+    const unsub = window.api.merge.onProgress(setProgress)
+    return unsub
+  }, [])
 
   useEffect(() => {
     window.api.language.getAll().then((items) => {
@@ -218,17 +225,13 @@ export function useMergeSetup(): UseMergeSetupResult {
   const step2Done = !!target.lang && !!target.importId && !!target.candidateId
   const step3Done = modName.trim().length > 0
 
-  const ready =
-    step1Done &&
-    step2Done &&
-    step3Done &&
-    source.lang !== target.lang &&
-    !isRunning
+  const ready = step1Done && step2Done && step3Done && source.lang !== target.lang && !isRunning
 
   const runMerge = useCallback(async () => {
     if (!ready) return
     if (!source.importId || !source.candidateId || !target.importId || !target.candidateId) return
     setIsRunning(true)
+    setProgress(null)
     try {
       const result: MergeResult = await window.api.merge.run({
         sourceImportId: source.importId,
@@ -242,14 +245,11 @@ export function useMergeSetup(): UseMergeSetupResult {
 
       const ignored = result.sourceOnly + result.targetOnly
       toast.success(
-        t(
-          ignored > 0 ? 'merge.mergedWithIgnored' : 'merge.merged',
-          {
-            ns: 'toasts',
-            matched: result.matched,
-            ignored
-          }
-        )
+        t(ignored > 0 ? 'merge.mergedWithIgnored' : 'merge.merged', {
+          ns: 'toasts',
+          matched: result.matched,
+          ignored
+        })
       )
 
       setSource((prev) => emptySlot(prev.lang))
@@ -259,6 +259,7 @@ export function useMergeSetup(): UseMergeSetupResult {
       toast.error(getLocalizedErrorMessage(error, t))
     } finally {
       setIsRunning(false)
+      setProgress(null)
     }
   }, [modName, ready, source, t, target])
 
@@ -269,6 +270,7 @@ export function useMergeSetup(): UseMergeSetupResult {
     languages,
     ready,
     isRunning,
+    progress,
     pendingSelection,
     step1Done,
     step2Done,
