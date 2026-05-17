@@ -341,6 +341,11 @@ export interface MergeApi {
   onProgress(cb: (data: MergeProgress) => void): UnsubscribeFn
 }
 
+export type XmlLoadProgress =
+  | { phase: 'unpacking' }
+  | { phase: 'parsing' }
+  | { phase: 'matching'; processed: number; total: number }
+
 export interface XmlApi {
   load(params: {
     inputPath: string
@@ -349,6 +354,7 @@ export interface XmlApi {
     modName?: string
   }): Promise<XmlEntry[]>
   export(params: { outputPath: string; entries: XmlEntry[] }): Promise<void>
+  onLoadProgress(cb: (data: XmlLoadProgress) => void): UnsubscribeFn
 }
 
 export interface ConfigApi {

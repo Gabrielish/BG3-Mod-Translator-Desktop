@@ -267,7 +267,10 @@ const api: AppApi = {
     export: (params: {
       outputPath: string
       entries: { uid: string; version: string; source: string; target: string; matchType: string }[]
-    }): Promise<void> => ipcRenderer.invoke('xml:export', params)
+    }): Promise<void> => ipcRenderer.invoke('xml:export', params),
+
+    onLoadProgress: (cb: (data: import('./api-types').XmlLoadProgress) => void): UnsubscribeFn =>
+      on('xml:load:progress', cb)
   },
 
   merge: {
