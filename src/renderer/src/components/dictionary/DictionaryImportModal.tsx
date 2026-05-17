@@ -1,5 +1,5 @@
 import { FileSpreadsheet, Upload } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { ModalShell } from '@/components/shared/ModalShell'
 import { getLocalizedErrorMessage } from '@/i18n/errors'
@@ -22,6 +22,8 @@ export function DictionaryImportModal({
   const [preview, setPreview] = useState<DictionaryImportPreview | null>(null)
   const [loading, setLoading] = useState(false)
   const [importing, setImporting] = useState(false)
+  const [importProgress, setImportProgress] = useState<{ processed: number; total: number } | null>(null)
+  const unsubRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     if (!open) {
@@ -29,6 +31,9 @@ export function DictionaryImportModal({
       setPreview(null)
       setLoading(false)
       setImporting(false)
+      setImportProgress(null)
+      unsubRef.current?.()
+      unsubRef.current = null
     }
   }, [open])
 
@@ -56,6 +61,14 @@ export function DictionaryImportModal({
   const handleImport = async () => {
     if (!filePath) return
     setImporting(true)
+    setImportProgress(null)
+
+    unsubRef.current = window.api.dictionary.onImportProgress((p) => {
+      if (p.phase === 'writing') {
+        setImportProgress({ processed: p.processed, total: p.total })
+      }
+    })
+
     try {
       const result = await window.api.dictionary.import({ filePath, format: 'csv' })
       toast.success(t('dictionary.imported', { ns: 'toasts', count: result.count }))
@@ -64,7 +77,10 @@ export function DictionaryImportModal({
     } catch (error) {
       toast.error(getLocalizedErrorMessage(error, t))
     } finally {
+      unsubRef.current?.()
+      unsubRef.current = null
       setImporting(false)
+      setImportProgress(null)
     }
   }
 
@@ -92,17 +108,41 @@ export function DictionaryImportModal({
             className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-amber-500 bg-amber-500 px-3 text-xs font-semibold text-neutral-950 transition-colors hover:border-amber-400 hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Upload size={13} />
-            {importing
-              ? t('importModal.importing', { ns: 'dictionary' })
-              : t('importModal.importCount', {
-                  ns: 'dictionary',
-                  count: preview?.totalRows ?? 0
-                })}
+            {importing && importProgress
+              ? `${importProgress.processed.toLocaleString()} / ${importProgress.total.toLocaleString()}`
+              : importing
+                ? t('importModal.importing', { ns: 'dictionary' })
+                : t('importModal.importCount', {
+                    ns: 'dictionary',
+                    count: preview?.totalRows ?? 0
+                  })}
           </button>
         </>
       }
     >
       <div className="flex flex-col gap-4">
+        {importing && (
+          <div className="space-y-1.5">
+            <div className="flex justify-between text-xs text-neutral-500">
+              <span>{importProgress ? t('importModal.importing', { ns: 'dictionary' }) : '...'}</span>
+              {importProgress && (
+                <span className="font-mono">
+                  {importProgress.processed.toLocaleString()} / {importProgress.total.toLocaleString()}
+                </span>
+              )}
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#1f2329]">
+              <div
+                className="h-full rounded-full bg-amber-500 transition-all duration-200"
+                style={{
+                  width: importProgress
+                    ? `${Math.round((importProgress.processed / importProgress.total) * 100)}%`
+                    : '0%'
+                }}
+              />
+            </div>
+          </div>
+        )}
         <button
           type="button"
           onClick={handleSelectFile}
