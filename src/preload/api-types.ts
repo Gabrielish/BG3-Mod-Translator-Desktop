@@ -105,6 +105,24 @@ export interface ModInfo {
   updatedAt: string | null
 }
 
+export interface ModWithPriority extends ModInfo {
+  priority: number | null
+}
+
+export interface DeleteModResult {
+  modName: string
+  dictionaryRows: number
+  hadMeta: boolean
+  folderRemoved: boolean
+  folderPath: string
+}
+
+export interface DeleteModPreview {
+  dictionaryRows: number
+  folderPath: string
+  folderExists: boolean
+}
+
 export interface ModMeta {
   metaFilePath: string
   name: string
@@ -240,6 +258,11 @@ export interface TranslationApi {
   onBatchError(cb: (data: TranslationBatchErrorEvent) => void): UnsubscribeFn
 }
 
+export type DictionaryImportProgressUpdate =
+  | { phase: 'reading' }
+  | { phase: 'parsing' }
+  | { phase: 'writing'; processed: number; total: number }
+
 export interface DictionaryApi {
   list(params: DictionaryListParams): Promise<DictionaryListResult>
   getAll(params: { lang1: string; lang2: string }): Promise<DictionaryEntry[]>
@@ -247,12 +270,14 @@ export interface DictionaryApi {
   create(entry: UpsertDictionaryPayload): Promise<{ success: boolean }>
   update(params: { id: number; entry: UpsertDictionaryPayload }): Promise<{ success: boolean }>
   upsert(entry: UpsertDictionaryPayload): Promise<{ success: boolean }>
+  bulkUpsert(entries: UpsertDictionaryPayload[]): Promise<{ count: number }>
   delete(params: { id: number }): Promise<{ success: boolean }>
   previewImport(params: {
     filePath: string
     format: 'csv' | 'xlsx'
   }): Promise<DictionaryImportPreview>
   import(params: { filePath: string; format: 'csv' | 'xlsx' }): Promise<{ count: number }>
+  onImportProgress(cb: (data: DictionaryImportProgressUpdate) => void): () => void
   export(params: {
     filters: DictionaryFilters
     format: 'csv' | 'xlsx'
@@ -310,6 +335,11 @@ export interface ModApi {
     meta: ModMeta
     bg3LanguageFolder: string
   }): Promise<{ outputPath: string }>
+  delete(params: { modName: string }): Promise<DeleteModResult>
+  previewDelete(params: { modName: string }): Promise<DeleteModPreview>
+  setPriority(params: { modName: string; priority: number | null }): Promise<{ success: boolean }>
+  reorderPriority(params: { orderedNames: string[] }): Promise<{ success: boolean }>
+  listWithPriority(params?: { lang1?: string; lang2?: string }): Promise<ModWithPriority[]>
 }
 
 export interface MergeResult {

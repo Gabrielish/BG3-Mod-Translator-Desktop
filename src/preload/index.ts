@@ -117,6 +117,17 @@ const api: AppApi = {
       uid?: string | null
     }): Promise<{ success: boolean }> => ipcRenderer.invoke('dictionary:upsert', entry),
 
+    bulkUpsert: (
+      entries: {
+        language1: string
+        language2: string
+        textLanguage1: string
+        textLanguage2: string
+        modName?: string | null
+        uid?: string | null
+      }[]
+    ): Promise<{ count: number }> => ipcRenderer.invoke('dictionary:bulkUpsert', entries),
+
     delete: (params: { id: number }): Promise<{ success: boolean }> =>
       ipcRenderer.invoke('dictionary:delete', params),
 
@@ -125,6 +136,10 @@ const api: AppApi = {
 
     import: (params: { filePath: string; format: 'csv' | 'xlsx' }): Promise<{ count: number }> =>
       ipcRenderer.invoke('dictionary:import', params),
+
+    onImportProgress: (
+      cb: (data: import('./api-types').DictionaryImportProgressUpdate) => void
+    ): UnsubscribeFn => on('dictionary:import:progress', cb),
 
     export: (params: {
       filters: {
@@ -245,7 +260,21 @@ const api: AppApi = {
         version64: string
       }
       bg3LanguageFolder: string
-    }): Promise<{ outputPath: string }> => ipcRenderer.invoke('mod:exportTranslatedPackage', params)
+    }): Promise<{ outputPath: string }> =>
+      ipcRenderer.invoke('mod:exportTranslatedPackage', params),
+
+    delete: (params: { modName: string }) => ipcRenderer.invoke('mod:delete', params),
+
+    previewDelete: (params: { modName: string }) => ipcRenderer.invoke('mod:previewDelete', params),
+
+    setPriority: (params: { modName: string; priority: number | null }) =>
+      ipcRenderer.invoke('mod:setPriority', params),
+
+    reorderPriority: (params: { orderedNames: string[] }) =>
+      ipcRenderer.invoke('mod:reorderPriority', params),
+
+    listWithPriority: (params?: { lang1?: string; lang2?: string }) =>
+      ipcRenderer.invoke('mod:listWithPriority', params)
   },
 
   xml: {
