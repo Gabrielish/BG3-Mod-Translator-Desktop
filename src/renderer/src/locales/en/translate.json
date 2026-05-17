@@ -52,6 +52,7 @@
     "loadingEditor": "Loading translation editor...",
     "loadingUnpacking": "Unpacking mod files…",
     "loadingParsing": "Parsing localization XML…",
+    "loadingCache": "Loading dictionary cache…",
     "loadingMatching": "Matching dictionary {{processed}} / {{total}}"
   },
   "routeSkeleton": {
