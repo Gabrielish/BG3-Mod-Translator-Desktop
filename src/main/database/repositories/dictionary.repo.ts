@@ -34,6 +34,17 @@ export interface UpsertParams {
 
 export type DictionaryMatchType = 'mod-text' | 'text'
 
+export interface DictionaryMatchIndex {
+  readonly byModUidKey: Map<string, DictionaryEntry>
+  readonly byModKey: Map<string, DictionaryEntry>
+  readonly byKey: Map<string, DictionaryEntry>
+  resolve(params: {
+    modName: string | null
+    uid: string | null
+    sourceText: string
+  }): { entry: DictionaryEntry; matchType: DictionaryMatchType } | undefined
+}
+
 export function getDictionaryTargetText(
   entry: { language1: string; textLanguage1: string; textLanguage2: string },
   sourceLang: string,
@@ -278,6 +289,79 @@ export class DictionaryRepository {
       map.set(sourceKey, { id: row.id, targetKey, uid: row.uid })
     }
     return map
+  }
+
+  // - modName param is reserved for future scoping; the index always covers the full language pair
+  loadMatchIndex(
+    sourceLang: string,
+    targetLang: string,
+    _modName?: string | null
+  ): DictionaryMatchIndex {
+    const [l1, l2, swapped] = normalizeLangs(sourceLang, targetLang)
+
+    const rows = this.db
+      .select()
+      .from(dictionary)
+      .where(and(eq(dictionary.language1, l1), eq(dictionary.language2, l2)))
+      .all() as DictionaryEntry[]
+
+    const byModUidKey = new Map<string, DictionaryEntry>()
+    const byModKey = new Map<string, DictionaryEntry>()
+    const byKey = new Map<string, DictionaryEntry>()
+
+    function newerWins(existing: DictionaryEntry, incoming: DictionaryEntry): boolean {
+      const a = existing.updatedAt ?? ''
+      const b = incoming.updatedAt ?? ''
+      if (b > a) return true
+      if (b < a) return false
+      return incoming.id > existing.id
+    }
+
+    for (const row of rows) {
+      const sourceKey = swapped ? row.textLanguage2Key : row.textLanguage1Key
+      if (!sourceKey) continue
+
+      const prev = byKey.get(sourceKey)
+      if (!prev || newerWins(prev, row)) byKey.set(sourceKey, row)
+
+      if (row.modName) {
+        const normalizedMod = row.modName.toLowerCase()
+        const modKey = `${normalizedMod}|${sourceKey}`
+        const prevMod = byModKey.get(modKey)
+        if (!prevMod || newerWins(prevMod, row)) byModKey.set(modKey, row)
+
+        if (row.uid) {
+          const modUidKey = `${normalizedMod}|${row.uid}|${sourceKey}`
+          const prevModUid = byModUidKey.get(modUidKey)
+          if (!prevModUid || newerWins(prevModUid, row)) byModUidKey.set(modUidKey, row)
+        }
+      }
+    }
+
+    return {
+      byModUidKey,
+      byModKey,
+      byKey,
+      resolve(params) {
+        const normalizedMod = params.modName?.trim().toLowerCase() || null
+        const sourceKey = dictionaryTextKey(params.sourceText)
+
+        if (normalizedMod) {
+          const uid = params.uid?.trim()
+          if (uid) {
+            const entry = byModUidKey.get(`${normalizedMod}|${uid}|${sourceKey}`)
+            if (entry) return { entry, matchType: 'mod-text' }
+          }
+          const entry = byModKey.get(`${normalizedMod}|${sourceKey}`)
+          if (entry) return { entry, matchType: 'mod-text' }
+        }
+
+        const entry = byKey.get(sourceKey)
+        if (entry) return { entry, matchType: 'text' }
+
+        return undefined
+      }
+    }
   }
 
   // Multi-row VALUES INSERT in a single transaction. Chunks internally so the bound

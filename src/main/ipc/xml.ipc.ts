@@ -1,26 +1,8 @@
-import path from 'node:path'
-import { ipcMain, type WebContents } from 'electron'
-import { getDictionaryTargetText } from '../database/repositories/dictionary.repo'
+import { ipcMain } from 'electron'
 import type { RepositoryRegistry } from '../database/repositories/registry'
-import { unpackMod } from '../services/lslib.service'
-import { decodeEntities, encodeEntities } from '../services/xml-entities.service'
-import {
-  findLocalizationXmls,
-  type LocalizationEntry,
-  parseLocalizationXml,
-  writeLocalizationXml
-} from '../services/xml-parser.service'
-import { extract } from '../services/zip.service'
-import { findPakFiles } from '../utils/findPakFiles'
-import { cleanupTempDir, createTempDir } from '../utils/tempDir'
-
-interface XmlEntry {
-  uid: string
-  version: string
-  source: string
-  target: string
-  matchType: 'none' | 'mod-text' | 'text' | 'manual'
-}
+import { encodeEntities } from '../services/xml-entities.service'
+import { loadXmlViaWorker, type XmlEntry } from '../services/xml-load.service'
+import { writeLocalizationXml } from '../services/xml-parser.service'
 
 interface LoadPayload {
   inputPath: string
@@ -34,104 +16,6 @@ interface ExportPayload {
   entries: XmlEntry[]
 }
 
-type XmlLoadProgress =
-  | { phase: 'unpacking' }
-  | { phase: 'parsing' }
-  | { phase: 'matching'; processed: number; total: number }
-
-function toUiEntry(entry: LocalizationEntry): Pick<XmlEntry, 'uid' | 'version' | 'source'> {
-  return {
-    uid: entry.contentuid,
-    version: entry.version,
-    source: decodeEntities(entry.text)
-  }
-}
-
-const MATCH_CHUNK = 500
-
-async function loadXml(
-  sender: WebContents,
-  repos: RepositoryRegistry,
-  payload: LoadPayload
-): Promise<XmlEntry[]> {
-  const { inputPath, sourceLang, targetLang, modName } = payload
-  const ext = path.extname(inputPath).toLowerCase()
-
-  let xmlPath: string
-  const tempDirs: string[] = []
-
-  try {
-    if (ext === '.xml') {
-      xmlPath = inputPath
-    } else if (ext === '.pak') {
-      sender.send('xml:load:progress', { phase: 'unpacking' } satisfies XmlLoadProgress)
-      const tempDir = createTempDir('icosa_xml')
-      tempDirs.push(tempDir)
-      await unpackMod(inputPath, tempDir)
-      const sourceFolder = languageFolder(repos, sourceLang)
-      const xmlFiles = findLocalizationXmls(tempDir, sourceFolder)
-      if (xmlFiles.length === 0)
-        throw new Error(`No XML found for language "${sourceFolder}" in pak`)
-      xmlPath = xmlFiles[0]
-    } else if (ext === '.zip') {
-      sender.send('xml:load:progress', { phase: 'unpacking' } satisfies XmlLoadProgress)
-      const archiveDir = createTempDir('icosa_zip')
-      tempDirs.push(archiveDir)
-      extract(inputPath, archiveDir)
-      const pakFiles = findPakFiles(archiveDir)
-      if (pakFiles.length === 0) throw new Error('No .pak file found inside zip')
-
-      const unpackedDir = createTempDir('icosa_pak')
-      tempDirs.push(unpackedDir)
-      await unpackMod(pakFiles[0], unpackedDir)
-      const sourceFolder = languageFolder(repos, sourceLang)
-      const xmlFiles = findLocalizationXmls(unpackedDir, sourceFolder)
-      if (xmlFiles.length === 0)
-        throw new Error(`No XML found for language "${sourceFolder}" in pak`)
-      xmlPath = xmlFiles[0]
-    } else {
-      throw new Error(`Unsupported file type: ${ext}. Use .xml, .pak, or .zip`)
-    }
-
-    sender.send('xml:load:progress', { phase: 'parsing' } satisfies XmlLoadProgress)
-    const localizationEntries = parseLocalizationXml(xmlPath)
-    const total = localizationEntries.length
-    const result: XmlEntry[] = new Array(total)
-
-    for (let i = 0; i < total; i += MATCH_CHUNK) {
-      const end = Math.min(i + MATCH_CHUNK, total)
-      for (let j = i; j < end; j++) {
-        const entry = localizationEntries[j]
-        const uiEntry = toUiEntry(entry)
-        const match = repos.dictionary.resolveMatch({
-          modName: modName ?? null,
-          uid: entry.contentuid,
-          sourceLang,
-          targetLang,
-          sourceText: entry.text
-        })
-        result[j] = match
-          ? {
-              ...uiEntry,
-              target: decodeEntities(getDictionaryTargetText(match.entry, sourceLang, targetLang)),
-              matchType: match.matchType
-            }
-          : { ...uiEntry, target: '', matchType: 'none' }
-      }
-      sender.send('xml:load:progress', {
-        phase: 'matching',
-        processed: end,
-        total
-      } satisfies XmlLoadProgress)
-      await new Promise<void>((resolve) => setImmediate(resolve))
-    }
-
-    return result
-  } finally {
-    for (const tempDir of tempDirs) cleanupTempDir(tempDir)
-  }
-}
-
 function exportXml(payload: ExportPayload): void {
   const { outputPath, entries } = payload
   const localizationEntries = entries.map((entry) => ({
@@ -142,14 +26,15 @@ function exportXml(payload: ExportPayload): void {
   writeLocalizationXml(localizationEntries, outputPath)
 }
 
-function languageFolder(repos: RepositoryRegistry, languageCode: string): string {
-  const language = repos.language.findByCode(languageCode)
-  return (language?.name ?? languageCode).replace(/[^a-zA-Z0-9]/g, '')
-}
-
 export function registerXmlHandlers(repos: RepositoryRegistry): void {
-  ipcMain.handle('xml:load', async (event, payload: LoadPayload) =>
-    loadXml(event.sender, repos, payload)
-  )
+  ipcMain.handle('xml:load', async (event, payload: LoadPayload) => {
+    const result = await loadXmlViaWorker({
+      ...payload,
+      repos,
+      onProgress: (p) => event.sender.send('xml:load:progress', p)
+    })
+    return result.entries
+  })
+
   ipcMain.handle('xml:export', (_event, payload: ExportPayload) => exportXml(payload))
 }

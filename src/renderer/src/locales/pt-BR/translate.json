@@ -52,6 +52,7 @@
     "loadingEditor": "Carregando editor de tradução...",
     "loadingUnpacking": "Descompactando arquivos do mod…",
     "loadingParsing": "Lendo XML de localização…",
+    "loadingCache": "Carregando cache do dicionário…",
     "loadingMatching": "Comparando dicionário {{processed}} / {{total}}"
   },
   "routeSkeleton": {

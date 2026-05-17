@@ -35,6 +35,9 @@ export function TranslateIdleScreen({ session }: TranslateIdleScreenProps): Reac
     if (loadingProgress.phase === 'unpacking')
       return t('setup.loadingUnpacking', { ns: 'translate' })
     if (loadingProgress.phase === 'parsing') return t('setup.loadingParsing', { ns: 'translate' })
+    // - phases: unpacking, parsing, loading-cache, matching
+    if (loadingProgress.phase === 'loading-cache')
+      return t('setup.loadingCache', { ns: 'translate' })
     if (loadingProgress.phase === 'matching')
       return t('setup.loadingMatching', {
         ns: 'translate',
