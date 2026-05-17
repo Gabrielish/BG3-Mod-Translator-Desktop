@@ -344,6 +344,7 @@ export interface MergeApi {
 export type XmlLoadProgress =
   | { phase: 'unpacking' }
   | { phase: 'parsing' }
+  | { phase: 'loading-cache' }
   | { phase: 'matching'; processed: number; total: number }
 
 export interface XmlApi {
