@@ -9,7 +9,9 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: resolve('src/main/index.ts'),
-          'merge.worker': resolve('src/main/workers/merge.worker.ts')
+          'merge.worker': resolve('src/main/workers/merge.worker.ts'),
+          'translate.worker': resolve('src/main/workers/translate.worker.ts'),
+          'xml-load.worker': resolve('src/main/workers/xml-load.worker.ts')
         }
       }
     }

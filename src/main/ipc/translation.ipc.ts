@@ -3,16 +3,14 @@ import { eq } from 'drizzle-orm'
 import { type BrowserWindow, ipcMain } from 'electron'
 import { getDb } from '../database/connection'
 import { config } from '../database/schema'
-import type { BasePipeline, PipelineOptions } from '../pipelines/base.pipeline'
-import { DeepLPipeline } from '../pipelines/deepl.pipeline'
-import { ManualPipeline } from '../pipelines/manual.pipeline'
-import { OpenAIPipeline } from '../pipelines/openai.pipeline'
+import type { PipelineOptions } from '../pipelines/base.pipeline'
 import {
-  translateBatchDetailed as translateDeepLBatch,
-  translateText as translateDeepL
+  translateText as translateDeepL,
+  translateBatchDetailed as translateDeepLBatch
 } from '../services/deepl.service'
 import { logError } from '../services/log.service'
 import { translateText as translateOpenAI } from '../services/openai.service'
+import { runTranslatePipeline } from '../services/translate.service'
 import { decodeEntities } from '../services/xml-entities.service'
 import { getActiveWindow } from '../utils/window'
 
@@ -44,8 +42,8 @@ interface BatchJobContext extends BatchPayload {
   getWindow: () => BrowserWindow | null
 }
 
-// Active jobs keyed by jobId - AbortController allows cancellation
-const activeJobs = new Map<string, AbortController>()
+// Active jobs keyed by jobId - cancel() sends cancel message to the worker
+const activeJobs = new Map<string, { cancel: () => void }>()
 
 export function registerTranslationHandlers(getWindow: () => BrowserWindow | null): void {
   ipcMain.handle('translation:start', async (_event, payload: TranslationStartPayload) => {
@@ -61,28 +59,26 @@ export function registerTranslationHandlers(getWindow: () => BrowserWindow | nul
       throw err
     }
     const jobId = randomUUID()
-    const controller = new AbortController()
-    activeJobs.set(jobId, controller)
 
-    const pipeline = buildPipeline(payload)
-
-    pipeline
-      .run({
-        jobId,
-        signal: controller.signal,
-        getWindow,
-        filePath: payload.filePath,
-        modName: payload.modName,
-        sourceLang: payload.sourceLang,
-        targetLang: payload.targetLang,
-        author: payload.author
-      })
-      .then(() => {
+    const { cancel } = runTranslatePipeline({
+      jobId,
+      ...payload,
+      onProgress: ({ current, total, source, target }) => {
+        const win = getActiveWindow(getWindow)
+        if (win) {
+          win.webContents.send('translation:progress', { jobId, current, total, source, target })
+        }
+      },
+      onDone: ({ outputPath }) => {
         activeJobs.delete(jobId)
-      })
-      .catch((err: Error) => {
+        const win = getActiveWindow(getWindow)
+        if (win) {
+          win.webContents.send('translation:done', { jobId, outputPath })
+        }
+      },
+      onError: ({ message }) => {
         activeJobs.delete(jobId)
-        logError('translation.start.pipeline', err, {
+        logError('translation.start.pipeline', new Error(message), {
           jobId,
           provider: payload.provider,
           sourceLang: payload.sourceLang,
@@ -91,18 +87,17 @@ export function registerTranslationHandlers(getWindow: () => BrowserWindow | nul
         })
         const win = getActiveWindow(getWindow)
         if (win) {
-          win.webContents.send('translation:error', {
-            jobId,
-            message: err.message ?? String(err)
-          })
+          win.webContents.send('translation:error', { jobId, message })
         }
-      })
+      }
+    })
 
+    activeJobs.set(jobId, { cancel })
     return { jobId }
   })
 
   ipcMain.handle('translation:cancel', (_event, { jobId }: { jobId: string }) => {
-    activeJobs.get(jobId)?.abort()
+    activeJobs.get(jobId)?.cancel()
     activeJobs.delete(jobId)
   })
 
@@ -137,10 +132,7 @@ export function registerTranslationHandlers(getWindow: () => BrowserWindow | nul
 
   ipcMain.handle(
     'translation:batch',
-    async (
-      _event,
-      payload: BatchPayload
-    ): Promise<{ jobId: string }> => {
+    async (_event, payload: BatchPayload): Promise<{ jobId: string }> => {
       const { provider, sourceLang, targetLang } = payload
       let apiKey: string
       try {
@@ -152,7 +144,7 @@ export function registerTranslationHandlers(getWindow: () => BrowserWindow | nul
 
       const jobId = randomUUID()
       const controller = new AbortController()
-      activeJobs.set(jobId, controller)
+      activeJobs.set(jobId, { cancel: () => controller.abort() })
 
       void runBatchJob({
         ...payload,
@@ -194,24 +186,6 @@ function requirePayloadApiKey(payload: TranslationStartPayload): void {
 
 function providerLabel(provider: 'openai' | 'deepl'): string {
   return provider === 'deepl' ? 'DeepL' : 'OpenAI'
-}
-
-function buildPipeline(payload: TranslationStartPayload): BasePipeline {
-  switch (payload.provider) {
-    case 'deepl':
-      if (!payload.apiKey) throw new Error('DeepL API key is required')
-      return new DeepLPipeline(payload.apiKey)
-
-    case 'openai':
-      if (!payload.apiKey) throw new Error('OpenAI API key is required')
-      return new OpenAIPipeline(payload.apiKey, payload.model)
-
-    case 'manual':
-      return new ManualPipeline()
-
-    default:
-      throw new Error(`Unknown translation provider: ${payload.provider}`)
-  }
 }
 
 // Worker pool: runs fn over items with at most `concurrency` parallel executions
@@ -450,5 +424,7 @@ function throwIfAborted(signal?: AbortSignal): void {
 }
 
 function isAbortError(err: unknown): boolean {
-  return err instanceof Error && (err.name === 'AbortError' || err.message === 'Translation cancelled')
+  return (
+    err instanceof Error && (err.name === 'AbortError' || err.message === 'Translation cancelled')
+  )
 }

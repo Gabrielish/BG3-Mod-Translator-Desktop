@@ -1,9 +1,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import type { BrowserWindow } from 'electron'
-import { getDb } from '../database/connection'
-import type { SimilarityRow } from '../database/repositories/dictionary.repo'
+import type { drizzle } from 'drizzle-orm/better-sqlite3'
 import {
+  type DictionaryMatchIndex,
   DictionaryRepository,
   getDictionaryTargetText
 } from '../database/repositories/dictionary.repo'
@@ -11,7 +10,7 @@ import { LanguageRepository } from '../database/repositories/language.repo'
 import { ModRepository } from '../database/repositories/mod.repo'
 import { packMod, unpackMod } from '../services/lslib.service'
 import { createMeta, readAttributeValue, sanitizeMetaFolder } from '../services/lsx-parser.service'
-import { findSimilar, type SimilarEntry } from '../services/similarity.service'
+import { type SimilarEntry, SimilarityIndex } from '../services/similarity.service'
 import {
   findLocalizationXmls,
   type LocalizationEntry,
@@ -21,7 +20,8 @@ import {
 import { createZip, extract } from '../services/zip.service'
 import { findPakFiles } from '../utils/findPakFiles'
 import { cleanupTempDir, createTempDir } from '../utils/tempDir'
-import { getActiveWindow } from '../utils/window'
+
+type AppDb = ReturnType<typeof drizzle>
 
 export interface PipelineOptions {
   filePath: string
@@ -34,7 +34,9 @@ export interface PipelineOptions {
 export interface PipelineContext extends PipelineOptions {
   jobId: string
   signal: AbortSignal
-  getWindow: () => BrowserWindow | null
+  db: AppDb
+  onProgress: (current: number, total: number, source: string, target: string) => void
+  onDone: (outputPath: string) => void
 }
 
 export interface TranslatedEntry extends LocalizationEntry {
@@ -47,7 +49,8 @@ export abstract class BasePipeline {
   private dictRepo!: DictionaryRepository
   private languageRepo!: LanguageRepository
   private modRepo!: ModRepository
-  private corpus: SimilarityRow[] = []
+  private similarityIndex!: SimilarityIndex
+  private matchIndex!: DictionaryMatchIndex
 
   abstract translate(
     text: string,
@@ -58,7 +61,7 @@ export abstract class BasePipeline {
 
   async run(ctx: PipelineContext): Promise<string> {
     this.ctx = ctx
-    const db = getDb()
+    const db = ctx.db
     this.dictRepo = new DictionaryRepository(db)
     this.languageRepo = new LanguageRepository(db)
     this.modRepo = new ModRepository(db)
@@ -72,14 +75,14 @@ export abstract class BasePipeline {
         return await this.runXml(ctx, outDir)
       }
 
-      // 1 — resolve .pak path (may need to unzip first)
+      // 1 - resolve .pak path (may need to unzip first)
       const pakPath = await this.resolvePak(ctx.filePath, tmpDir)
 
-      // 2 — unpack .pak
+      // 2 - unpack .pak
       const unpackedDir = path.join(tmpDir, 'unpacked')
       await unpackMod(pakPath, unpackedDir)
 
-      // 3 — find source XMLs
+      // 3 - find source XMLs
       const sourceFolder = this.languageFolder(ctx.sourceLang)
       const targetFolder = this.languageFolder(ctx.targetLang)
       const xmlFiles = findLocalizationXmls(unpackedDir, sourceFolder)
@@ -87,15 +90,17 @@ export abstract class BasePipeline {
         throw new Error(`No localization XMLs found for language '${sourceFolder}' in the mod`)
       }
 
-      // 4 — pre-load corpus for similarity search (once per run)
-      this.corpus = this.dictRepo.getAllForSimilarity(ctx.sourceLang, ctx.targetLang)
+      // 4 - pre-load similarity index and match index once per run
+      const corpusRows = this.dictRepo.getAllForSimilarity(ctx.sourceLang, ctx.targetLang)
+      this.similarityIndex = new SimilarityIndex(corpusRows)
+      this.matchIndex = this.dictRepo.loadMatchIndex(ctx.sourceLang, ctx.targetLang)
 
-      // 5 — count total entries for progress tracking
+      // 5 - count total entries for progress tracking
       const allEntries = xmlFiles.flatMap((f) => parseLocalizationXml(f))
       const total = allEntries.length
       let current = 0
 
-      // 6 — ensure mod record exists
+      // 6 - ensure mod record exists
       this.modRepo.upsert(ctx.modName)
 
       const metaSrc = findMetaLsx(unpackedDir)
@@ -126,13 +131,13 @@ export abstract class BasePipeline {
       // 8 - generate meta.lsx for the translated add-on
       this.updateMeta(metaSrc, modRoot, ctx, translatedModName)
 
-      // 9 — pack translated folder into .pak
+      // 9 - pack translated folder into .pak
       const packedDir = path.join(tmpDir, 'packed')
       fs.mkdirSync(packedDir, { recursive: true })
       const outPakPath = path.join(packedDir, `${ctx.modName}_${ctx.targetLang}.pak`)
       await packMod(packageRoot, outPakPath)
 
-      // 10 — wrap in .zip for distribution
+      // 10 - wrap in .zip for distribution
       const finalZip = path.join(path.dirname(ctx.filePath), `${ctx.modName}_${ctx.targetLang}.zip`)
       createZip(packedDir, finalZip)
 
@@ -145,7 +150,9 @@ export abstract class BasePipeline {
   }
 
   private async runXml(ctx: PipelineContext, outDir: string): Promise<string> {
-    this.corpus = this.dictRepo.getAllForSimilarity(ctx.sourceLang, ctx.targetLang)
+    const corpusRows = this.dictRepo.getAllForSimilarity(ctx.sourceLang, ctx.targetLang)
+    this.similarityIndex = new SimilarityIndex(corpusRows)
+    this.matchIndex = this.dictRepo.loadMatchIndex(ctx.sourceLang, ctx.targetLang)
     this.modRepo.upsert(ctx.modName)
 
     const entries = parseLocalizationXml(ctx.filePath)
@@ -195,22 +202,19 @@ export abstract class BasePipeline {
   private async resolveTranslation(entry: LocalizationEntry): Promise<string> {
     const { sourceLang, targetLang, modName } = this.ctx
 
-    const match = this.dictRepo.resolveMatch({
-      modName,
+    const match = this.matchIndex.resolve({
+      modName: modName ?? null,
       uid: entry.contentuid || null,
-      sourceLang,
-      targetLang,
       sourceText: entry.text
     })
     if (match) {
       return getDictionaryTargetText(match.entry, sourceLang, targetLang)
     }
 
-    // 3. not in cache → translate via subclass
-    const context = findSimilar(entry.text, this.corpus, 5)
+    // cache miss - translate via subclass
+    const context = this.similarityIndex.search(entry.text, 5)
     const translated = await this.translate(entry.text, sourceLang, targetLang, context)
 
-    // 2. save to dictionary
     this.dictRepo.upsert({
       sourceLang,
       targetLang,
@@ -220,8 +224,8 @@ export abstract class BasePipeline {
       uid: entry.contentuid || undefined
     })
 
-    // refresh corpus with the new entry
-    this.corpus.push({ source: entry.text, target: translated })
+    // - matchIndex is left slightly stale; the new entry lands on the next run
+    this.similarityIndex.add({ source: entry.text, target: translated })
 
     return translated
   }
@@ -267,23 +271,11 @@ export abstract class BasePipeline {
   }
 
   private emitProgress(current: number, total: number, source: string, target: string): void {
-    const win = getActiveWindow(this.ctx.getWindow)
-    if (win) {
-      win.webContents.send('translation:progress', {
-        jobId: this.ctx.jobId,
-        current,
-        total,
-        source,
-        target
-      })
-    }
+    this.ctx.onProgress(current, total, source, target)
   }
 
   private emitDone(outputPath: string): void {
-    const win = getActiveWindow(this.ctx.getWindow)
-    if (win) {
-      win.webContents.send('translation:done', { jobId: this.ctx.jobId, outputPath })
-    }
+    this.ctx.onDone(outputPath)
   }
 }
 
