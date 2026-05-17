@@ -18,6 +18,7 @@ export const mod = sqliteTable('mod', {
   name: text('name').unique().notNull(),
   totalStrings: integer('total_strings').default(0),
   lastFilePath: text('last_file_path'),
+  priority: integer('priority'),
   ...timestamps
 })
 
