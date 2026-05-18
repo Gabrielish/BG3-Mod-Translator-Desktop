@@ -11,7 +11,8 @@ export default defineConfig({
           index: resolve('src/main/index.ts'),
           'merge.worker': resolve('src/main/workers/merge.worker.ts'),
           'translate.worker': resolve('src/main/workers/translate.worker.ts'),
-          'xml-load.worker': resolve('src/main/workers/xml-load.worker.ts')
+          'xml-load.worker': resolve('src/main/workers/xml-load.worker.ts'),
+          'import.worker': resolve('src/main/workers/import.worker.ts')
         }
       }
     }

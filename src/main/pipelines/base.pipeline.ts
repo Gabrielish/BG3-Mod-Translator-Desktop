@@ -93,7 +93,13 @@ export abstract class BasePipeline {
       // 4 - pre-load similarity index and match index once per run
       const corpusRows = this.dictRepo.getAllForSimilarity(ctx.sourceLang, ctx.targetLang)
       this.similarityIndex = new SimilarityIndex(corpusRows)
-      this.matchIndex = this.dictRepo.loadMatchIndex(ctx.sourceLang, ctx.targetLang)
+      const priorityMods = this.modRepo.getPriorityOrdered()
+      this.matchIndex = this.dictRepo.loadMatchIndex(
+        ctx.sourceLang,
+        ctx.targetLang,
+        null,
+        priorityMods
+      )
 
       // 5 - count total entries for progress tracking
       const allEntries = xmlFiles.flatMap((f) => parseLocalizationXml(f))
@@ -152,7 +158,13 @@ export abstract class BasePipeline {
   private async runXml(ctx: PipelineContext, outDir: string): Promise<string> {
     const corpusRows = this.dictRepo.getAllForSimilarity(ctx.sourceLang, ctx.targetLang)
     this.similarityIndex = new SimilarityIndex(corpusRows)
-    this.matchIndex = this.dictRepo.loadMatchIndex(ctx.sourceLang, ctx.targetLang)
+    const priorityMods = this.modRepo.getPriorityOrdered()
+    this.matchIndex = this.dictRepo.loadMatchIndex(
+      ctx.sourceLang,
+      ctx.targetLang,
+      null,
+      priorityMods
+    )
     this.modRepo.upsert(ctx.modName)
 
     const entries = parseLocalizationXml(ctx.filePath)

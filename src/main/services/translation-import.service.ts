@@ -362,7 +362,7 @@ function readOriginalXmlName(
   return fileName.toLowerCase().endsWith('.xml') ? fileName : `${fallbackFolder}.xml`
 }
 
-function getStoredModDir(modName: string): string {
+export function getStoredModDir(modName: string): string {
   return path.join(app.getPath('userData'), 'icosa', 'mods', sanitizeStoredModName(modName))
 }
 

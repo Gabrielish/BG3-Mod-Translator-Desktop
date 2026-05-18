@@ -1,4 +1,4 @@
-import { BookOpen, Languages, Merge, Package, PackageOpen, Settings } from 'lucide-react'
+import { BookOpen, Boxes, Languages, Merge, Package, PackageOpen, Settings } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { useAppTranslation } from '@/i18n/useAppTranslation'
 import { cn } from '@/lib/utils'
@@ -6,12 +6,15 @@ import { cn } from '@/lib/utils'
 const NAV_ITEMS = [
   { to: '/translate', icon: Languages, labelKey: 'translate', kbd: 'Ctrl 1' },
   { to: '/dictionary', icon: BookOpen, labelKey: 'dictionary', kbd: 'Ctrl 2' },
-  { to: '/merge', icon: Merge, labelKey: 'merge', kbd: 'Ctrl 3' },
-  { to: '/extract', icon: PackageOpen, labelKey: 'extract', kbd: 'Ctrl 4' },
-  { to: '/package', icon: Package, labelKey: 'package', kbd: 'Ctrl 5' }
+  { to: '/mods', icon: Boxes, labelKey: 'mods', kbd: 'Ctrl 3' },
+  { to: '/merge', icon: Merge, labelKey: 'merge', kbd: 'Ctrl 4' },
+  { to: '/extract', icon: PackageOpen, labelKey: 'extract', kbd: 'Ctrl 5' },
+  { to: '/package', icon: Package, labelKey: 'package', kbd: 'Ctrl 6' }
 ] as const
 
-const FOOTER_ITEMS = [{ to: '/settings', icon: Settings, labelKey: 'settings', kbd: 'Ctrl 6' }] as const
+const FOOTER_ITEMS = [
+  { to: '/settings', icon: Settings, labelKey: 'settings', kbd: 'Ctrl 7' }
+] as const
 
 function NavItem({
   to,
@@ -66,13 +69,25 @@ export function Sidebar(): React.JSX.Element {
     >
       <nav className="flex flex-1 flex-col gap-0.5 px-2 py-3">
         {NAV_ITEMS.map((item) => (
-          <NavItem key={item.to} to={item.to} icon={item.icon} kbd={item.kbd} label={t(item.labelKey)} />
+          <NavItem
+            key={item.to}
+            to={item.to}
+            icon={item.icon}
+            kbd={item.kbd}
+            label={t(item.labelKey)}
+          />
         ))}
       </nav>
 
       <div className="border-t border-[#1f2329] px-2 py-3">
         {FOOTER_ITEMS.map((item) => (
-          <NavItem key={item.to} to={item.to} icon={item.icon} kbd={item.kbd} label={t(item.labelKey)} />
+          <NavItem
+            key={item.to}
+            to={item.to}
+            icon={item.icon}
+            kbd={item.kbd}
+            label={t(item.labelKey)}
+          />
         ))}
       </div>
     </aside>

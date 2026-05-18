@@ -4,11 +4,13 @@ import { app, ipcMain } from 'electron'
 import type { RepositoryRegistry } from '../database/repositories/registry'
 import { packMod, unpackMod } from '../services/lslib.service'
 import type { MetaInfo } from '../services/lsx-parser.service'
+import { deleteMod } from '../services/mod-delete.service'
 import {
   completeTranslationImport as completeImport,
   discardTranslationInput,
   exportTranslatedPackage,
   getMetaForMod,
+  getStoredModDir,
   prepareTranslationInput,
   upsertMetaForMod
 } from '../services/translation-import.service'
@@ -164,4 +166,42 @@ export function registerModHandlers(repos: RepositoryRegistry): void {
       return { storedPath: destPath }
     }
   )
+
+  ipcMain.handle('mod:delete', async (_e, { modName }: { modName: string }) =>
+    deleteMod({ modName, db: repos.db })
+  )
+
+  ipcMain.handle('mod:previewDelete', (_e, { modName }: { modName: string }) => {
+    const folderPath = getStoredModDir(modName)
+    const folderExists = fs.existsSync(folderPath)
+    const dictionaryRows = repos.dictionary.countAllByMod(modName)
+    return { dictionaryRows, folderPath, folderExists }
+  })
+
+  ipcMain.handle(
+    'mod:setPriority',
+    (_e, { modName, priority }: { modName: string; priority: number | null }) => {
+      repos.mod.setPriority(modName, priority)
+      repos.mod.compactPriority()
+      return { success: true }
+    }
+  )
+
+  ipcMain.handle('mod:reorderPriority', (_e, { orderedNames }: { orderedNames: string[] }) => {
+    repos.mod.reorderPriority(orderedNames)
+    return { success: true }
+  })
+
+  ipcMain.handle('mod:listWithPriority', (_e, params?: { lang1?: string; lang2?: string }) => {
+    const mods = repos.mod.getAll()
+    const { lang1, lang2 } = params ?? {}
+    return mods.map((m) => ({
+      name: m.name,
+      totalStrings: m.totalStrings ?? 0,
+      translatedStrings: lang1 && lang2 ? repos.dictionary.countByMod(m.name, lang1, lang2) : 0,
+      lastFilePath: m.lastFilePath ?? null,
+      updatedAt: m.updatedAt ?? null,
+      priority: m.priority ?? null
+    }))
+  })
 }

@@ -1,6 +1,6 @@
 {
   "name": "icosa",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "private": true,
   "description": "Desktop translator for Baldur's Gate 3 mod localization.",
   "main": "./out/main/index.js",
@@ -33,6 +33,9 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
     "@tanstack/react-virtual": "^3.13.24",

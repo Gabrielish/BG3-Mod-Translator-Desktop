@@ -3,6 +3,7 @@ import dictionaryEn from '@/locales/en/dictionary.json'
 import errorsEn from '@/locales/en/errors.json'
 import extractEn from '@/locales/en/extract.json'
 import mergeEn from '@/locales/en/merge.json'
+import modsEn from '@/locales/en/mods.json'
 import packageEn from '@/locales/en/package.json'
 import settingsEn from '@/locales/en/settings.json'
 import sidebarEn from '@/locales/en/sidebar.json'
@@ -13,6 +14,7 @@ import dictionaryPtBr from '@/locales/pt-BR/dictionary.json'
 import errorsPtBr from '@/locales/pt-BR/errors.json'
 import extractPtBr from '@/locales/pt-BR/extract.json'
 import mergePtBr from '@/locales/pt-BR/merge.json'
+import modsPtBr from '@/locales/pt-BR/mods.json'
 import packagePtBr from '@/locales/pt-BR/package.json'
 import settingsPtBr from '@/locales/pt-BR/settings.json'
 import sidebarPtBr from '@/locales/pt-BR/sidebar.json'
@@ -26,6 +28,7 @@ export const translationNamespaces = [
   'translate',
   'dictionary',
   'merge',
+  'mods',
   'package',
   'extract',
   'errors',
@@ -40,6 +43,7 @@ export const resources = {
     translate: translateEn,
     dictionary: dictionaryEn,
     merge: mergeEn,
+    mods: modsEn,
     package: packageEn,
     extract: extractEn,
     errors: errorsEn,
@@ -52,6 +56,7 @@ export const resources = {
     translate: translatePtBr,
     dictionary: dictionaryPtBr,
     merge: mergePtBr,
+    mods: modsPtBr,
     package: packagePtBr,
     extract: extractPtBr,
     errors: errorsPtBr,

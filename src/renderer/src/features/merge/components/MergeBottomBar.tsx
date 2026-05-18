@@ -52,16 +52,16 @@ export function MergeBottomBar({
       <div className="mx-auto flex max-w-220 flex-col gap-2 rounded-xl border border-neutral-700 bg-[#131518] px-4 py-3 shadow-xl">
         {showProgress && (
           <div className="space-y-1.5">
-            <div className="h-2 rounded-full bg-[#1d2127]">
-              {progressPct !== undefined ? (
+            {progressPct !== undefined ? (
+              <div className="h-2 rounded-full bg-[#1d2127]">
                 <div
                   className="h-full rounded-full bg-amber-400/80 transition-[width] duration-200"
                   style={{ width: `${progressPct}%` }}
                 />
-              ) : (
-                <div className="h-full w-2/3 animate-pulse rounded-full bg-amber-400/80" />
-              )}
-            </div>
+              </div>
+            ) : (
+              <div className="h-2 animate-pulse rounded-full bg-amber-400/30" />
+            )}
             <p className="text-xs text-neutral-400">{progressLabel()}</p>
           </div>
         )}
