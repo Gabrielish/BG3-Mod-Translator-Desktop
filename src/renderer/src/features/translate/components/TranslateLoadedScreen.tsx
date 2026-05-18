@@ -88,6 +88,7 @@ export function TranslateLoadedScreen({ session }: TranslateLoadedScreenProps): 
         batchCompleted={batch.batchCompleted}
         batchTotal={batch.batchTotal}
         onTranslateDeepL={() => batch.batchTranslate('deepl')}
+        onTranslateGoogle={() => batch.batchTranslate('google')}
         // onTranslateGPT={() => batch.batchTranslate('openai')}
         onCancelTranslation={batch.cancelBatch}
         onClearSelection={session.clearSelection}
