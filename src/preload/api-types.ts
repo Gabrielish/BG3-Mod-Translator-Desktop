@@ -161,6 +161,7 @@ export interface CompleteTranslationImportResult {
 export type ConfigKey =
   | 'openai_key'
   | 'deepl_key'
+  | 'google_key'
   | 'last_source_lang'
   | 'last_target_lang'
   | 'app_language'

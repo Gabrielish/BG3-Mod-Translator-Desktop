@@ -162,6 +162,20 @@ export function SettingsPage(): React.JSX.Element {
               label: t('fields.deeplKey')
             })}
           />
+          <SettingField
+            label={t('fields.googleKey')}
+            configKey="google_key"
+            value={config['google_key'] ?? ''}
+            onSave={set}
+            type="password"
+            placeholder="AIza..."
+            saveLabel={t('buttons.save')}
+            savedLabel={t('buttons.saved')}
+            successMessage={t('settings.saved', {
+              ns: 'toasts',
+              label: t('fields.googleKey')
+            })}
+          />
         </SettingsCard>
 
         <SettingsCard title={t('sections.language')}>
