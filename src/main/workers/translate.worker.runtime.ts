@@ -3,12 +3,13 @@ import { drizzle } from 'drizzle-orm/better-sqlite3'
 import * as schema from '../database/schema'
 import type { BasePipeline } from '../pipelines/base.pipeline'
 import { DeepLPipeline } from '../pipelines/deepl.pipeline'
+import { GooglePipeline } from '../pipelines/google.pipeline'
 import { ManualPipeline } from '../pipelines/manual.pipeline'
 import { OpenAIPipeline } from '../pipelines/openai.pipeline'
 
 export interface TranslateWorkerInput {
   jobId: string
-  provider: 'deepl' | 'openai' | 'manual'
+  provider: 'deepl' | 'google' | 'openai' | 'manual'
   apiKey?: string
   model?: string
   filePath: string
@@ -29,6 +30,9 @@ function buildPipeline(input: TranslateWorkerInput): BasePipeline {
     case 'deepl':
       if (!input.apiKey) throw new Error('DeepL API key is required')
       return new DeepLPipeline(input.apiKey)
+    case 'google':
+      if (!input.apiKey) throw new Error('Google Translate API key is required')
+      return new GooglePipeline(input.apiKey)
     case 'openai':
       if (!input.apiKey) throw new Error('OpenAI API key is required')
       return new OpenAIPipeline(input.apiKey, input.model)

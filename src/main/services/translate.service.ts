@@ -13,7 +13,7 @@ export interface TranslatePipelineParams {
   sourceLang: string
   targetLang: string
   author?: string
-  provider: 'deepl' | 'openai' | 'manual'
+  provider: 'deepl' | 'google' | 'openai' | 'manual'
   apiKey?: string
   model?: string
   onProgress: (p: { current: number; total: number; source: string; target: string }) => void

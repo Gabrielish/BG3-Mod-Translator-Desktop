@@ -8,13 +8,17 @@ import {
   translateText as translateDeepL,
   translateBatchDetailed as translateDeepLBatch
 } from '../services/deepl.service'
+import {
+  translateText as translateGoogle,
+  translateBatchDetailed as translateGoogleBatch
+} from '../services/google.service'
 import { logError } from '../services/log.service'
 import { translateText as translateOpenAI } from '../services/openai.service'
-import { runTranslatePipeline } from '../services/translate.service'
+import { runTranslatePipeline, type TranslatePipelineParams } from '../services/translate.service'
 import { decodeEntities } from '../services/xml-entities.service'
 import { getActiveWindow } from '../utils/window'
 
-export type TranslationProvider = 'openai' | 'deepl' | 'manual'
+export type TranslationProvider = 'openai' | 'deepl' | 'google' | 'manual'
 
 export interface TranslationStartPayload extends PipelineOptions {
   provider: TranslationProvider
@@ -24,7 +28,7 @@ export interface TranslationStartPayload extends PipelineOptions {
 
 interface BatchPayload {
   entries: { uid: string; source: string }[]
-  provider: 'openai' | 'deepl'
+  provider: 'openai' | 'deepl' | 'google'
   sourceLang: string
   targetLang: string
 }
@@ -63,6 +67,7 @@ export function registerTranslationHandlers(getWindow: () => BrowserWindow | nul
     const { cancel } = runTranslatePipeline({
       jobId,
       ...payload,
+      provider: payload.provider as TranslatePipelineParams['provider'],
       onProgress: ({ current, total, source, target }) => {
         const win = getActiveWindow(getWindow)
         if (win) {
@@ -106,7 +111,7 @@ export function registerTranslationHandlers(getWindow: () => BrowserWindow | nul
     async (
       _event,
       payload: {
-        provider: 'openai' | 'deepl'
+        provider: 'openai' | 'deepl' | 'google'
         text: string
         sourceLang: string
         targetLang: string
@@ -117,6 +122,9 @@ export function registerTranslationHandlers(getWindow: () => BrowserWindow | nul
         const apiKey = requireStoredApiKey(provider)
         if (provider === 'deepl') {
           return decodeEntities(await translateDeepL(text, sourceLang, targetLang, apiKey))
+        }
+        if (provider === 'google') {
+          return decodeEntities(await translateGoogle(text, sourceLang, targetLang, apiKey))
         }
         return decodeEntities(await translateOpenAI(text, sourceLang, targetLang, apiKey))
       } catch (err) {
@@ -161,9 +169,10 @@ export function registerTranslationHandlers(getWindow: () => BrowserWindow | nul
   )
 }
 
-function readApiKey(provider: 'openai' | 'deepl'): string | null {
+function readApiKey(provider: 'openai' | 'deepl' | 'google'): string | null {
   const db = getDb()
-  const key = provider === 'deepl' ? 'deepl_key' : 'openai_key'
+  const key =
+    provider === 'deepl' ? 'deepl_key' : provider === 'google' ? 'google_key' : 'openai_key'
   const row = db.select().from(config).where(eq(config.key, key)).get() as
     | { key: string; value: string | null }
     | undefined
@@ -171,7 +180,7 @@ function readApiKey(provider: 'openai' | 'deepl'): string | null {
   return value.length > 0 ? value : null
 }
 
-function requireStoredApiKey(provider: 'openai' | 'deepl'): string {
+function requireStoredApiKey(provider: 'openai' | 'deepl' | 'google'): string {
   const apiKey = readApiKey(provider)
   if (!apiKey) throw new Error(`${providerLabel(provider)} API key not configured. Go to Settings.`)
   return apiKey
@@ -184,8 +193,10 @@ function requirePayloadApiKey(payload: TranslationStartPayload): void {
   }
 }
 
-function providerLabel(provider: 'openai' | 'deepl'): string {
-  return provider === 'deepl' ? 'DeepL' : 'OpenAI'
+function providerLabel(provider: 'openai' | 'deepl' | 'google'): string {
+  if (provider === 'deepl') return 'DeepL'
+  if (provider === 'google') return 'Google'
+  return 'OpenAI'
 }
 
 // Worker pool: runs fn over items with at most `concurrency` parallel executions
@@ -216,6 +227,8 @@ async function runBatchJob(ctx: BatchJobContext): Promise<void> {
   try {
     if (ctx.provider === 'deepl') {
       await runDeepLBatchJob(ctx, summary)
+    } else if (ctx.provider === 'google') {
+      await runGoogleBatchJob(ctx, summary)
     } else {
       await runOpenAIBatchJob(ctx, summary)
     }
@@ -302,6 +315,78 @@ async function runDeepLBatchJob(ctx: BatchJobContext, summary: BatchSummary): Pr
         logError(
           'translation.batch.deepl.entry',
           new Error(pending.error ?? 'DeepL batch entry failed'),
+          {
+            jobId: ctx.jobId,
+            uid: pending.entry.uid,
+            sourceLang: ctx.sourceLang,
+            targetLang: ctx.targetLang,
+            source: pending.entry.source
+          }
+        )
+        emitBatchProgress(ctx.getWindow, {
+          jobId: ctx.jobId,
+          uid: pending.entry.uid,
+          completed: summary.translated + summary.failed,
+          total: summary.total,
+          target: null,
+          error: pending.error
+        })
+      }
+      return
+    }
+
+    pendingEntries = nextPending.map((pending) => pending.entry)
+  }
+}
+
+async function runGoogleBatchJob(ctx: BatchJobContext, summary: BatchSummary): Promise<void> {
+  let pendingEntries = [...ctx.entries]
+
+  while (pendingEntries.length > 0) {
+    throwIfAborted(ctx.signal)
+
+    const results = await translateGoogleBatch(
+      pendingEntries.map((entry) => entry.source),
+      ctx.sourceLang,
+      ctx.targetLang,
+      ctx.apiKey,
+      ctx.signal
+    )
+
+    let roundSuccesses = 0
+    const nextPending: Array<{ entry: BatchPayload['entries'][number]; error?: string }> = []
+
+    for (const result of results) {
+      const entry = pendingEntries[result.index]
+      if (!entry) continue
+
+      if (result.translated != null) {
+        roundSuccesses++
+        summary.translated++
+        emitBatchProgress(ctx.getWindow, {
+          jobId: ctx.jobId,
+          uid: entry.uid,
+          completed: summary.translated + summary.failed,
+          total: summary.total,
+          target: decodeEntities(result.translated)
+        })
+        continue
+      }
+
+      nextPending.push({ entry, error: result.error })
+    }
+
+    if (nextPending.length === 0) {
+      summary.failed = 0
+      return
+    }
+
+    if (roundSuccesses === 0) {
+      for (const pending of nextPending) {
+        summary.failed++
+        logError(
+          'translation.batch.google.entry',
+          new Error(pending.error ?? 'Google batch entry failed'),
           {
             jobId: ctx.jobId,
             uid: pending.entry.uid,
