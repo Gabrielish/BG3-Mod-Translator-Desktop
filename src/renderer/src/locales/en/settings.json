@@ -10,6 +10,7 @@
   },
   "fields": {
     "deeplKey": "DeepL API key",
+    "googleKey": "Google Translate API key",
     "defaultAuthor": "Default author",
     "defaultSourceLanguage": "Default source language",
     "defaultTargetLanguage": "Default target language",

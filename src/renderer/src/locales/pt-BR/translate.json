@@ -104,6 +104,7 @@
     "translating": "Traduzindo {{completed}} / {{total}}",
     "stop": "Parar",
     "translateWithDeepL": "Traduzir com DeepL",
+    "translateWithGoogle": "Traduzir com Google",
     "clearSelection": "Limpar seleção",
     "noSelection": "Nenhuma entrada selecionada",
     "cancelled": "{{translated}} de {{total}} entradas traduzidas antes do cancelamento",
