@@ -25,6 +25,9 @@ win:
     - target: nsis
       arch:
         - x64
+    - target: portable
+      arch:
+        - x64
   requestedExecutionLevel: asInvoker
 nsis:
   artifactName: ${productName}-${version}-windows-${arch}-setup.${ext}
