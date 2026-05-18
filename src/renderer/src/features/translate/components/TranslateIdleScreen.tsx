@@ -188,25 +188,16 @@ export function TranslateIdleScreen({ session }: TranslateIdleScreenProps): Reac
                 <Loader2 size={18} className="animate-spin text-amber-400" />
                 <div className="text-sm font-semibold text-neutral-200">{loadingLabel}</div>
               </div>
-              <div className="space-y-2">
+              {loadingProgress?.phase === 'matching' && loadingProgress.total > 0 && (
                 <div className="h-2 rounded-full bg-[#1d2127]">
-                  {loadingProgress?.phase === 'matching' && loadingProgress.total > 0 ? (
-                    <div
-                      className="h-full rounded-full bg-amber-400/80 transition-[width] duration-200"
-                      style={{
-                        width: `${(loadingProgress.processed / loadingProgress.total) * 100}%`
-                      }}
-                    />
-                  ) : (
-                    <div className="h-full w-2/3 animate-pulse rounded-full bg-amber-400/80" />
-                  )}
+                  <div
+                    className="h-full rounded-full bg-amber-400/80 transition-[width] duration-200"
+                    style={{
+                      width: `${(loadingProgress.processed / loadingProgress.total) * 100}%`
+                    }}
+                  />
                 </div>
-                <div className="grid gap-2">
-                  <div className="h-8 animate-pulse rounded-lg bg-[#1a1d22]" />
-                  <div className="h-8 animate-pulse rounded-lg bg-[#1a1d22]" />
-                  <div className="h-8 animate-pulse rounded-lg bg-[#1a1d22]" />
-                </div>
-              </div>
+              )}
             </div>
           </div>
         )}
