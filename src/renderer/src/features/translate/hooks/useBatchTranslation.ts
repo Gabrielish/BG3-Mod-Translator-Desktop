@@ -27,7 +27,7 @@ export function useBatchTranslation(session: TranslationSession) {
   const batchErrorsRef = useRef<Map<string, string>>(new Map())
   const pendingAllEntriesRef = useRef<BatchEntry[]>([])
   const pendingUntranslatedEntriesRef = useRef<BatchEntry[]>([])
-  const pendingProviderRef = useRef<'openai' | 'deepl'>('deepl')
+  const pendingProviderRef = useRef<'openai' | 'deepl' | 'google'>('deepl')
   const { sourceLang, targetLang, updateEntry, clearSelection, selectEntries } = session
 
   const clearListeners = useCallback(() => {
@@ -64,7 +64,7 @@ export function useBatchTranslation(session: TranslationSession) {
   }, [clearListeners])
 
   const dispatchBatchEntries = useCallback(
-    async (entriesToSend: BatchEntry[], provider: 'openai' | 'deepl') => {
+    async (entriesToSend: BatchEntry[], provider: 'openai' | 'deepl' | 'google') => {
       pendingUidsRef.current = new Set(entriesToSend.map((e) => e.uid))
       batchErrorsRef.current = new Map()
       setBatchCompleted(0)
@@ -217,7 +217,7 @@ export function useBatchTranslation(session: TranslationSession) {
   }, [])
 
   const batchTranslate = useCallback(
-    async (provider: 'openai' | 'deepl') => {
+    async (provider: 'openai' | 'deepl' | 'google') => {
       if (isBatchTranslating) return
 
       const materialized = materializeSelectedEntries(session)

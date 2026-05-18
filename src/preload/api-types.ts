@@ -1,7 +1,7 @@
 import type { ElectronAPI } from '@electron-toolkit/preload'
 
 export type UnsubscribeFn = () => void
-export type TranslationProvider = 'openai' | 'deepl' | 'manual'
+export type TranslationProvider = 'openai' | 'deepl' | 'google' | 'manual'
 
 export interface TranslationStartPayload {
   provider: TranslationProvider
@@ -242,14 +242,14 @@ export interface TranslationApi {
   onDone(cb: (data: TranslationDoneEvent) => void): UnsubscribeFn
   onError(cb: (data: TranslationErrorEvent) => void): UnsubscribeFn
   single(payload: {
-    provider: 'openai' | 'deepl'
+    provider: 'openai' | 'deepl' | 'google'
     text: string
     sourceLang: string
     targetLang: string
   }): Promise<string>
   batch(payload: {
     entries: { uid: string; source: string }[]
-    provider: 'openai' | 'deepl'
+    provider: 'openai' | 'deepl' | 'google'
     sourceLang: string
     targetLang: string
   }): Promise<{ jobId: string }>

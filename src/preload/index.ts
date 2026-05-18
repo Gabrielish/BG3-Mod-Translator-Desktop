@@ -46,7 +46,7 @@ const api: AppApi = {
       on('translation:error', cb),
 
     single: (payload: {
-      provider: 'openai' | 'deepl'
+      provider: 'openai' | 'deepl' | 'google'
       text: string
       sourceLang: string
       targetLang: string
@@ -54,7 +54,7 @@ const api: AppApi = {
 
     batch: (payload: {
       entries: { uid: string; source: string }[]
-      provider: 'openai' | 'deepl'
+      provider: 'openai' | 'deepl' | 'google'
       sourceLang: string
       targetLang: string
     }): Promise<{ jobId: string }> => ipcRenderer.invoke('translation:batch', payload),
