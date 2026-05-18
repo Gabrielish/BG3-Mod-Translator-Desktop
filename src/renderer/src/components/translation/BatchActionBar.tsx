@@ -6,6 +6,7 @@ interface BatchActionBarProps {
   batchCompleted: number
   batchTotal: number
   onTranslateDeepL: () => void
+  onTranslateGoogle: () => void
   // onTranslateGPT: () => void
   onCancelTranslation: () => void
   onClearSelection: () => void
@@ -17,6 +18,7 @@ export function BatchActionBar({
   batchCompleted,
   batchTotal,
   onTranslateDeepL,
+  onTranslateGoogle,
   // onTranslateGPT,
   onCancelTranslation,
   onClearSelection,
@@ -58,6 +60,13 @@ export function BatchActionBar({
             className="cursor-pointer rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
           >
             {t('batchBar.translateWithDeepL', { ns: 'translate' })}
+          </button>
+          <button
+            type="button"
+            onClick={onTranslateGoogle}
+            className="cursor-pointer rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-red-700"
+          >
+            {t('batchBar.translateWithGoogle', { ns: 'translate' })}
           </button>
           {/* <button
             type="button"
