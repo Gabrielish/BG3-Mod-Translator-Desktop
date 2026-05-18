@@ -28,7 +28,7 @@ const ROW_HEIGHT = 56
 
 export function ManageModsPage(): React.JSX.Element {
   const { t } = useAppTranslation('mods')
-  const { mods, loading, promote, demote, moveUp, moveDown, setPosition, reorder } = useManageMods()
+  const { mods, loading, refetch, promote, demote, moveUp, moveDown, setPosition, reorder } = useManageMods()
 
   const [searchQuery, setSearchQuery] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
@@ -96,6 +96,7 @@ export function ManageModsPage(): React.JSX.Element {
 
   const handleDeleteConfirmed = (_result: DeleteModResult) => {
     setDeleteTarget(null)
+    void refetch()
   }
 
   const isSearchActive = query.length > 0
