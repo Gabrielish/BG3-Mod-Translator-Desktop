@@ -22,6 +22,7 @@
   },
   "translate": {
     "entrySaved": "Entrada salva no dicionário",
+    "sourceCopied": "Texto de origem copiado",
     "nothingToSave": "Nenhuma tradução para salvar",
     "savedCount": "{{count}} traduções salvas no dicionário",
     "xmlExported": "XML exportado com sucesso",

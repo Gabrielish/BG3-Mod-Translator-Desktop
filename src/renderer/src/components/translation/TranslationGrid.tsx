@@ -1,4 +1,5 @@
-import { AlertTriangle, BookOpen, Check, Search, X } from 'lucide-react'
+import { useVirtualizer } from '@tanstack/react-virtual'
+import { AlertTriangle, BookOpen, Check, Copy, RefreshCw, Search, X } from 'lucide-react'
 import {
   startTransition,
   useDeferredValue,
@@ -8,14 +9,15 @@ import {
   useState,
   useTransition
 } from 'react'
-import { useVirtualizer } from '@tanstack/react-virtual'
+import { toast } from 'sonner'
+import { HighlightedTextarea } from '@/components/shared/HighlightedTextarea'
 import {
   type FilterSpec,
-  type TranslationSessionEntry,
   materializeSelectedEntries,
+  type TranslationSessionEntry,
   useTranslationSession
 } from '@/context/TranslationSession'
-import { HighlightedTextarea } from '@/components/shared/HighlightedTextarea'
+import { getLocalizedErrorMessage } from '@/i18n/errors'
 import { useAppTranslation } from '@/i18n/useAppTranslation'
 import { cn } from '@/lib/utils'
 import { renderSource } from '@/utils/renderSource'
@@ -72,10 +74,17 @@ export function TranslationGrid({
   onEntrySave,
   viewMode
 }: TranslationGridProps): React.JSX.Element {
-  const { t } = useAppTranslation(['translate', 'common'])
+  const { t } = useAppTranslation(['translate', 'common', 'toasts'])
   const session = useTranslationSession()
-  const { selection, isSelected, selectAllMatching, toggleEntry, clearSelection, sourceLang, targetLang } =
-    session
+  const {
+    selection,
+    isSelected,
+    selectAllMatching,
+    toggleEntry,
+    clearSelection,
+    sourceLang,
+    targetLang
+  } = session
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<FilterMode>('all')
   const deferredSearch = useDeferredValue(search)
@@ -83,6 +92,7 @@ export function TranslationGrid({
   const [isPending, startFilterTransition] = useTransition()
   const [pageSize, setPageSize] = useState<100 | 250 | 500 | 1000>(250)
   const [currentPage, setCurrentPage] = useState(1)
+  const [stickyRowIds, setStickyRowIds] = useState<Set<string>>(() => new Set())
   const searchInputRef = useRef<HTMLInputElement>(null)
   const textareaRefs = useRef<Map<string, HTMLTextAreaElement>>(new Map())
   const savedByEnterRef = useRef<Set<string>>(new Set())
@@ -107,6 +117,7 @@ export function TranslationGrid({
 
   const filteredEntries = useMemo(() => {
     return entries.filter((entry) => {
+      if (stickyRowIds.has(entry.rowId)) return true
       if (deferredFilter === 'untranslated' && entry.target.trim()) return false
       if (deferredFilter === 'translated' && !entry.target.trim()) return false
       if (deferredFilter === 'dictionary' && getCategory(entry) !== 'dictionary') return false
@@ -119,15 +130,16 @@ export function TranslationGrid({
       }
       return true
     })
-  }, [deferredFilter, deferredSearch, entries])
+  }, [deferredFilter, deferredSearch, entries, stickyRowIds])
 
   useEffect(() => {
     setCurrentPage(1)
   }, [deferredFilter, deferredSearch, entries])
 
-  // clear selection when filter or search changes so count never disagrees with checkbox
+  // clear selection and sticky rows when filter or search changes
   useEffect(() => {
     clearSelection()
+    setStickyRowIds(new Set())
   }, [deferredFilter, deferredSearch, clearSelection])
 
   // single source of truth for which entries "select-all" covers
@@ -140,14 +152,14 @@ export function TranslationGrid({
     count: pageEntries.length,
     getScrollElement: () => sideParentRef.current,
     estimateSize: () => 72,
-    overscan: 10,
+    overscan: 10
   })
 
   const stackedVirtualizer = useVirtualizer({
     count: pageEntries.length,
     getScrollElement: () => stackedParentRef.current,
     estimateSize: () => 220,
-    overscan: 10,
+    overscan: 10
   })
 
   const selectedStats = useMemo(() => {
@@ -189,11 +201,31 @@ export function TranslationGrid({
     textareaRefs.current.get(rowId)?.focus()
   }
 
+  const handleCopySource = async (event: React.MouseEvent, source: string) => {
+    event.stopPropagation()
+    try {
+      await navigator.clipboard.writeText(source)
+      toast.success(t('translate.sourceCopied', { ns: 'toasts' }))
+    } catch (err) {
+      toast.error(getLocalizedErrorMessage(err, t))
+    }
+  }
+
   const updateEntryTarget = (entry: TranslationSessionEntry, value: string) => {
     if (value !== entry.target) {
       onEntryChange(entry.rowId, value)
       if (entry.matchType === 'none') onEntryManualEdit(entry.rowId)
     }
+  }
+
+  const markSticky = (rowId: string) => {
+    if (deferredFilter === 'all' && !deferredSearch) return
+    setStickyRowIds((prev) => {
+      if (prev.has(rowId)) return prev
+      const next = new Set(prev)
+      next.add(rowId)
+      return next
+    })
   }
 
   const handleEntryBlur = (entry: TranslationSessionEntry, value: string) => {
@@ -202,6 +234,7 @@ export function TranslationGrid({
       return
     }
     updateEntryTarget(entry, value)
+    markSticky(entry.rowId)
   }
 
   const handleEnterKey = (
@@ -213,6 +246,7 @@ export function TranslationGrid({
 
     const value = event.currentTarget.value
     updateEntryTarget(entry, value)
+    markSticky(entry.rowId)
     savedByEnterRef.current.add(entry.rowId)
 
     if (value.trim()) onEntrySave(entry.rowId, value)
@@ -343,11 +377,7 @@ export function TranslationGrid({
           className="min-w-0 flex-1 bg-transparent text-xs font-medium text-neutral-300 placeholder:text-neutral-600 focus:outline-none"
         />
         {search && (
-          <button
-            type="button"
-            onClick={() => setSearch('')}
-            className="shrink-0 cursor-pointer"
-          >
+          <button type="button" onClick={() => setSearch('')} className="shrink-0 cursor-pointer">
             <X size={13} className="text-neutral-500 transition-colors hover:text-neutral-300" />
           </button>
         )}
@@ -395,6 +425,22 @@ export function TranslationGrid({
             </button>
           )
         })}
+
+        <button
+          type="button"
+          aria-label={t('grid.refreshView', { ns: 'translate' })}
+          title={t('grid.refreshView', { ns: 'translate' })}
+          disabled={stickyRowIds.size === 0}
+          onClick={() => setStickyRowIds(new Set())}
+          className={cn(btnBase, 'gap-1.5 disabled:cursor-not-allowed disabled:opacity-40')}
+        >
+          <RefreshCw size={12} />
+          {stickyRowIds.size > 0 && (
+            <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-amber-400">
+              {t('grid.refreshViewHidden', { ns: 'translate', count: stickyRowIds.size })}
+            </span>
+          )}
+        </button>
       </div>
 
       <div className="ml-auto flex items-center gap-3 text-xs font-semibold text-neutral-400">
@@ -474,7 +520,7 @@ export function TranslationGrid({
                     left: 0,
                     width: '100%',
                     transform: `translateY(${virtualItem.start}px)`,
-                    gridTemplateColumns: '80px 1fr 1fr',
+                    gridTemplateColumns: '80px 1fr 1fr'
                   }}
                 >
                   <div
@@ -499,10 +545,7 @@ export function TranslationGrid({
                     />
                   </div>
 
-                  <div
-                    className="flex min-w-0 cursor-pointer flex-col gap-2 px-4 py-3"
-                    onClick={() => focusEntry(entry.rowId)}
-                  >
+                  <div className="flex min-w-0 cursor-text flex-col gap-2 px-4 py-3">
                     <div className="wrap-break-word font-mono text-[13px] leading-[1.6] text-neutral-200 whitespace-pre-wrap">
                       {entry.source ? (
                         renderSource(entry.source)
@@ -520,6 +563,17 @@ export function TranslationGrid({
                       )}
                       <span className="font-mono text-[10px] text-neutral-600">
                         {t('grid.charCount', { ns: 'translate', count: charCount })}
+                      </span>
+                      <span className="ml-auto">
+                        <button
+                          type="button"
+                          aria-label={t('grid.copySource', { ns: 'translate' })}
+                          title={t('grid.copySource', { ns: 'translate' })}
+                          className="inline-flex h-6 cursor-pointer items-center gap-1 rounded bg-transparent px-2 text-[11px] text-neutral-400 transition-colors hover:bg-[#1c1f24] hover:text-neutral-200"
+                          onClick={(event) => handleCopySource(event, entry.source)}
+                        >
+                          <Copy size={11} />
+                        </button>
                       </span>
                     </div>
                   </div>
@@ -618,13 +672,13 @@ export function TranslationGrid({
                   transform: `translateY(${virtualItem.start + 20}px)`,
                   paddingLeft: '28px',
                   paddingRight: '28px',
-                  paddingBottom: '14px',
+                  paddingBottom: '14px'
                 }}
               >
                 <div className="mx-auto max-w-275">
                   <div
                     className={cn(
-                      'group grid cursor-pointer overflow-hidden rounded-xl border transition-all duration-120',
+                      'group grid cursor-default overflow-hidden rounded-xl border transition-all duration-120',
                       'border-[#1f2329] bg-[#0f1114]',
                       'hover:-translate-y-px hover:border-[#2a2f37] hover:shadow-[0_4px_16px_rgba(0,0,0,0.18)]',
                       'focus-within:border-amber-500 focus-within:shadow-[0_0_0_3px_rgba(245,158,11,0.25),0_8px_24px_rgba(0,0,0,0.24)]',
@@ -689,9 +743,19 @@ export function TranslationGrid({
                         )}
                         {hasTags && (
                           <span className="inline-flex items-center gap-1 rounded bg-purple-500/14 px-2 py-0.5 text-[11px] font-medium text-purple-300">
-                            <AlertTriangle size={11} /> {t('grid.containsTags', { ns: 'translate' })}
+                            <AlertTriangle size={11} />{' '}
+                            {t('grid.containsTags', { ns: 'translate' })}
                           </span>
                         )}
+                        <button
+                          type="button"
+                          aria-label={t('grid.copySource', { ns: 'translate' })}
+                          title={t('grid.copySource', { ns: 'translate' })}
+                          className="inline-flex h-6 cursor-pointer items-center gap-1 rounded bg-transparent px-2 text-[11px] text-neutral-400 transition-colors hover:bg-[#1c1f24] hover:text-neutral-200"
+                          onClick={(event) => handleCopySource(event, entry.source)}
+                        >
+                          <Copy size={11} />
+                        </button>
                       </div>
 
                       <div className="wrap-break-word font-mono text-[14px] leading-[1.65] text-neutral-200 whitespace-pre-wrap">

@@ -22,6 +22,7 @@
   },
   "translate": {
     "entrySaved": "Entry saved to dictionary",
+    "sourceCopied": "Source text copied",
     "nothingToSave": "No translation to save",
     "savedCount": "{{count}} translations saved to the dictionary",
     "xmlExported": "XML exported successfully",

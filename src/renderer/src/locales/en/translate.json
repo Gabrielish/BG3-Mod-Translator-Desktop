@@ -74,6 +74,7 @@
     "translationPlaceholder": "Translation...",
     "startTyping": "Start typing the translation...",
     "applyDictionary": "Apply dictionary",
+    "copySource": "Copy source",
     "markTranslated": "Mark as translated",
     "next": "next",
     "newLine": "new line",
@@ -82,6 +83,8 @@
     "dictionarySuggestion": "Dictionary suggests:",
     "dictionaryTagMod": "1 term (mod)",
     "dictionaryTag": "1 term",
+    "refreshView": "Refresh list",
+    "refreshViewHidden": "{{count}} pending",
     "pagination": {
       "pageSizeLabel": "Rows per page",
       "pageOf": "Page {{current}} of {{total}}",
