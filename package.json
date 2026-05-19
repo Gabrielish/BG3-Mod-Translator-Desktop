@@ -1,6 +1,6 @@
 {
   "name": "icosa",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "private": true,
   "description": "Desktop translator for Baldur's Gate 3 mod localization.",
   "main": "./out/main/index.js",
@@ -52,6 +52,7 @@
     "react-i18next": "^17.0.7",
     "react-resizable-panels": "^4.11.0",
     "react-router-dom": "^7.14.2",
+    "recharts": "^3.8.1",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0"
   },
