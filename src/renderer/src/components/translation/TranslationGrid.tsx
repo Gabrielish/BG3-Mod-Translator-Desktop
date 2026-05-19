@@ -1,5 +1,5 @@
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { AlertTriangle, BookOpen, Check, Copy, Search, X } from 'lucide-react'
+import { AlertTriangle, BookOpen, Check, Copy, RefreshCw, Search, X } from 'lucide-react'
 import {
   startTransition,
   useDeferredValue,
@@ -92,6 +92,7 @@ export function TranslationGrid({
   const [isPending, startFilterTransition] = useTransition()
   const [pageSize, setPageSize] = useState<100 | 250 | 500 | 1000>(250)
   const [currentPage, setCurrentPage] = useState(1)
+  const [stickyRowIds, setStickyRowIds] = useState<Set<string>>(() => new Set())
   const searchInputRef = useRef<HTMLInputElement>(null)
   const textareaRefs = useRef<Map<string, HTMLTextAreaElement>>(new Map())
   const savedByEnterRef = useRef<Set<string>>(new Set())
@@ -116,6 +117,7 @@ export function TranslationGrid({
 
   const filteredEntries = useMemo(() => {
     return entries.filter((entry) => {
+      if (stickyRowIds.has(entry.rowId)) return true
       if (deferredFilter === 'untranslated' && entry.target.trim()) return false
       if (deferredFilter === 'translated' && !entry.target.trim()) return false
       if (deferredFilter === 'dictionary' && getCategory(entry) !== 'dictionary') return false
@@ -128,15 +130,16 @@ export function TranslationGrid({
       }
       return true
     })
-  }, [deferredFilter, deferredSearch, entries])
+  }, [deferredFilter, deferredSearch, entries, stickyRowIds])
 
   useEffect(() => {
     setCurrentPage(1)
   }, [deferredFilter, deferredSearch, entries])
 
-  // clear selection when filter or search changes so count never disagrees with checkbox
+  // clear selection and sticky rows when filter or search changes
   useEffect(() => {
     clearSelection()
+    setStickyRowIds(new Set())
   }, [deferredFilter, deferredSearch, clearSelection])
 
   // single source of truth for which entries "select-all" covers
@@ -215,12 +218,23 @@ export function TranslationGrid({
     }
   }
 
+  const markSticky = (rowId: string) => {
+    if (deferredFilter === 'all' && !deferredSearch) return
+    setStickyRowIds((prev) => {
+      if (prev.has(rowId)) return prev
+      const next = new Set(prev)
+      next.add(rowId)
+      return next
+    })
+  }
+
   const handleEntryBlur = (entry: TranslationSessionEntry, value: string) => {
     if (savedByEnterRef.current.has(entry.rowId)) {
       savedByEnterRef.current.delete(entry.rowId)
       return
     }
     updateEntryTarget(entry, value)
+    markSticky(entry.rowId)
   }
 
   const handleEnterKey = (
@@ -232,6 +246,7 @@ export function TranslationGrid({
 
     const value = event.currentTarget.value
     updateEntryTarget(entry, value)
+    markSticky(entry.rowId)
     savedByEnterRef.current.add(entry.rowId)
 
     if (value.trim()) onEntrySave(entry.rowId, value)
@@ -410,6 +425,22 @@ export function TranslationGrid({
             </button>
           )
         })}
+
+        <button
+          type="button"
+          aria-label={t('grid.refreshView', { ns: 'translate' })}
+          title={t('grid.refreshView', { ns: 'translate' })}
+          disabled={stickyRowIds.size === 0}
+          onClick={() => setStickyRowIds(new Set())}
+          className={cn(btnBase, 'gap-1.5 disabled:cursor-not-allowed disabled:opacity-40')}
+        >
+          <RefreshCw size={12} />
+          {stickyRowIds.size > 0 && (
+            <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-amber-400">
+              {t('grid.refreshViewHidden', { ns: 'translate', count: stickyRowIds.size })}
+            </span>
+          )}
+        </button>
       </div>
 
       <div className="ml-auto flex items-center gap-3 text-xs font-semibold text-neutral-400">
