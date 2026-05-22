@@ -134,7 +134,7 @@ export function TranslationGrid({
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [deferredFilter, deferredSearch, entries])
+  }, [deferredFilter, deferredSearch])
 
   // clear selection and sticky rows when filter or search changes
   useEffect(() => {
@@ -146,6 +146,11 @@ export function TranslationGrid({
   const currentFilter: FilterSpec = { mode: deferredFilter, search: deferredSearch }
 
   const totalPages = Math.max(1, Math.ceil(filteredEntries.length / pageSize))
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages)
+  }, [currentPage, totalPages])
+
   const pageEntries = filteredEntries.slice((currentPage - 1) * pageSize, currentPage * pageSize)
 
   const sideVirtualizer = useVirtualizer({
