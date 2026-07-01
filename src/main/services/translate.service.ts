@@ -1,6 +1,8 @@
 import path from 'node:path'
 import { Worker } from 'node:worker_threads'
 import { app } from 'electron'
+import type { TranslationProvider } from '../../preload/api-types'
+import type { AiPipelineSimilarity } from '../pipelines/ai.pipeline'
 import type {
   TranslateWorkerInput,
   TranslateWorkerProgress
@@ -13,9 +15,11 @@ export interface TranslatePipelineParams {
   sourceLang: string
   targetLang: string
   author?: string
-  provider: 'deepl' | 'google' | 'openai' | 'manual'
+  provider: TranslationProvider
   apiKey?: string
   model?: string
+  promptTemplate?: string
+  similarity?: AiPipelineSimilarity
   onProgress: (p: { current: number; total: number; source: string; target: string }) => void
   onDone: (p: { outputPath: string }) => void
   onError: (p: { message: string }) => void

@@ -1,17 +1,21 @@
 import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
+import type { TranslationProvider } from '../../preload/api-types'
 import * as schema from '../database/schema'
+import { AIPipeline, type AiPipelineSimilarity } from '../pipelines/ai.pipeline'
 import type { BasePipeline } from '../pipelines/base.pipeline'
 import { DeepLPipeline } from '../pipelines/deepl.pipeline'
 import { GooglePipeline } from '../pipelines/google.pipeline'
 import { ManualPipeline } from '../pipelines/manual.pipeline'
-import { OpenAIPipeline } from '../pipelines/openai.pipeline'
+import { isAiProvider, PROVIDER_CONFIG } from '../services/ai/provider-registry'
 
 export interface TranslateWorkerInput {
   jobId: string
-  provider: 'deepl' | 'google' | 'openai' | 'manual'
+  provider: TranslationProvider
   apiKey?: string
   model?: string
+  promptTemplate?: string
+  similarity?: AiPipelineSimilarity
   filePath: string
   modName: string
   sourceLang: string
@@ -25,21 +29,35 @@ export type TranslateWorkerProgress =
   | { phase: 'done'; outputPath: string }
   | { phase: 'error'; message: string }
 
+const DEFAULT_SIMILARITY: AiPipelineSimilarity = { enabled: false, count: 3, minScore: 0.35 }
+
 function buildPipeline(input: TranslateWorkerInput): BasePipeline {
-  switch (input.provider) {
+  const provider = input.provider
+
+  if (isAiProvider(provider)) {
+    if (!input.apiKey) throw new Error(`${PROVIDER_CONFIG[provider].label} API key is required`)
+    if (!input.promptTemplate) throw new Error('Prompt template is required for AI translation')
+    const model = input.model || PROVIDER_CONFIG[provider].defaultModel
+    return new AIPipeline(
+      provider,
+      input.apiKey,
+      model,
+      input.promptTemplate,
+      input.similarity ?? DEFAULT_SIMILARITY
+    )
+  }
+
+  switch (provider) {
     case 'deepl':
       if (!input.apiKey) throw new Error('DeepL API key is required')
       return new DeepLPipeline(input.apiKey)
     case 'google':
       if (!input.apiKey) throw new Error('Google Translate API key is required')
       return new GooglePipeline(input.apiKey)
-    case 'openai':
-      if (!input.apiKey) throw new Error('OpenAI API key is required')
-      return new OpenAIPipeline(input.apiKey, input.model)
     case 'manual':
       return new ManualPipeline()
     default:
-      throw new Error(`Unknown translation provider: ${input.provider}`)
+      throw new Error(`Unknown translation provider: ${provider}`)
   }
 }
 

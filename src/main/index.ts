@@ -1,8 +1,8 @@
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import { app, BrowserWindow, shell } from 'electron'
 import { join } from 'path'
-import icon from '../../resources/icon.png?asset'
 import iconWin from '../../resources/icon.ico?asset'
+import icon from '../../resources/icon.png?asset'
 import { closeDb, getDb } from './database/connection'
 import { createRepositoryRegistry } from './database/repositories/registry'
 import { registerConfigHandlers } from './ipc/config.ipc'
@@ -13,6 +13,7 @@ import { registerLogHandlers } from './ipc/log.ipc'
 import { registerMergeHandlers } from './ipc/merge.ipc'
 import { registerMetricsHandlers } from './ipc/metrics.ipc'
 import { registerModHandlers } from './ipc/mod.ipc'
+import { registerPromptSlotHandlers } from './ipc/prompt-slot.ipc'
 import { registerTranslationHandlers } from './ipc/translation.ipc'
 import { registerWindowHandlers, setupWindowEvents } from './ipc/window.ipc'
 import { registerXmlHandlers } from './ipc/xml.ipc'
@@ -20,6 +21,16 @@ import { logError } from './services/log.service'
 import { createUsageService } from './services/usage.service'
 
 let mainWindow: BrowserWindow | null = null
+
+// Dev-only: load .env so keys like GEMINI_API_KEY are available for testing without first
+// pasting them into Settings. Packaged builds read keys from the config store only.
+if (is.dev && typeof process.loadEnvFile === 'function') {
+  try {
+    process.loadEnvFile()
+  } catch {
+    // no .env present - fine
+  }
+}
 
 function getWindow(): BrowserWindow | null {
   return mainWindow
@@ -81,6 +92,7 @@ app.whenReady().then(() => {
   registerMergeHandlers(repos)
   registerMetricsHandlers(repos, usageService)
   registerConfigHandlers()
+  registerPromptSlotHandlers(repos)
   registerFsHandlers()
   registerXmlHandlers(repos)
 
