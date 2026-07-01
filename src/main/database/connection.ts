@@ -7,6 +7,7 @@ import { app } from 'electron'
 import { dictionaryTextKey } from '../utils/dictionaryText'
 import * as schema from './schema'
 import { seedLanguages } from './seeds/languages.seed'
+import { seedPromptSlots } from './seeds/prompt-slots.seed'
 
 type AppDb = ReturnType<typeof drizzle<typeof schema>>
 
@@ -29,6 +30,7 @@ export function getDb(): AppDb {
     migrate(_db, { migrationsFolder: getMigrationsFolder() })
     backfillDictionaryTextKeys(_sqlite)
     seedLanguages(_db)
+    seedPromptSlots(_db)
   }
   return _db
 }

@@ -64,6 +64,13 @@
       "when": 1779133579328,
       "tag": "0008_clean_princess_powerful",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1782945157817,
+      "tag": "0009_peaceful_bishop",
+      "breakpoints": true
     }
   ]
 }
