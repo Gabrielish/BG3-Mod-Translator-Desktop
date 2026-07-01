@@ -1,3 +1,4 @@
+import aiEn from '@/locales/en/ai.json'
 import commonEn from '@/locales/en/common.json'
 import dictionaryEn from '@/locales/en/dictionary.json'
 import errorsEn from '@/locales/en/errors.json'
@@ -10,6 +11,7 @@ import settingsEn from '@/locales/en/settings.json'
 import sidebarEn from '@/locales/en/sidebar.json'
 import toastsEn from '@/locales/en/toasts.json'
 import translateEn from '@/locales/en/translate.json'
+import aiPtBr from '@/locales/pt-BR/ai.json'
 import commonPtBr from '@/locales/pt-BR/common.json'
 import dictionaryPtBr from '@/locales/pt-BR/dictionary.json'
 import errorsPtBr from '@/locales/pt-BR/errors.json'
@@ -24,6 +26,7 @@ import toastsPtBr from '@/locales/pt-BR/toasts.json'
 import translatePtBr from '@/locales/pt-BR/translate.json'
 
 export const translationNamespaces = [
+  'ai',
   'common',
   'settings',
   'sidebar',
@@ -40,6 +43,7 @@ export const translationNamespaces = [
 
 export const resources = {
   en: {
+    ai: aiEn,
     common: commonEn,
     settings: settingsEn,
     sidebar: sidebarEn,
@@ -54,6 +58,7 @@ export const resources = {
     metrics: metricsEn
   },
   'pt-BR': {
+    ai: aiPtBr,
     common: commonPtBr,
     settings: settingsPtBr,
     sidebar: sidebarPtBr,

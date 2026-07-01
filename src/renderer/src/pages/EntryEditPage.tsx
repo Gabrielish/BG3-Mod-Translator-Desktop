@@ -1,8 +1,9 @@
-import { ArrowLeft, Loader2 } from 'lucide-react'
+import { ArrowLeft, Loader2, Sparkles } from 'lucide-react'
 import { useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { HighlightedTextarea } from '@/components/shared/HighlightedTextarea'
+import { AITranslateModal } from '@/components/translation/AITranslateModal'
 import { QuotaExceededDialog } from '@/components/translation/QuotaExceededDialog'
 import { type TranslationSessionEntry, useTranslationSession } from '@/context/TranslationSession'
 import { getLocalizedErrorMessage } from '@/i18n/errors'
@@ -28,10 +29,11 @@ function EntryEditor({
   session: ReturnType<typeof useTranslationSession>
 }): React.JSX.Element {
   const navigate = useNavigate()
-  const { t } = useAppTranslation(['translate', 'common'])
+  const { t } = useAppTranslation(['translate', 'common', 'ai'])
   const { sourceLang, targetLang, updateEntry, markManual } = session
 
   const [target, setTarget] = useState(entry.target ?? '')
+  const [aiModalOpen, setAiModalOpen] = useState(false)
   const [translating, setTranslating] = useState<'deepl' | 'openai' | null>(null)
   const [quotaBlock, setQuotaBlock] = useState<{
     service: string
@@ -117,6 +119,17 @@ function EntryEditor({
         renewalAt={quotaBlock?.renewalAt}
         onClose={() => setQuotaBlock(null)}
       />
+      <AITranslateModal
+        open={aiModalOpen}
+        source={entry.source}
+        sourceLang={sourceLang}
+        targetLang={targetLang}
+        onApply={(result) => {
+          setTarget(result)
+          updateEntry(entry.rowId, result)
+        }}
+        onClose={() => setAiModalOpen(false)}
+      />
       <div className="mx-auto flex h-full max-w-4xl flex-col gap-6 p-6">
         <div className="flex items-center gap-3">
           <button
@@ -174,15 +187,15 @@ function EntryEditor({
             {translating === 'deepl' && <Loader2 size={14} className="animate-spin" />}
             {t('entryEdit.translateWithDeepL', { ns: 'translate' })}
           </button>
-          {/* <button
-          type="button"
-          onClick={() => handleTranslate('openai')}
-          disabled={translating !== null}
-          className="flex cursor-pointer items-center gap-2 rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {translating === 'openai' && <Loader2 size={14} className="animate-spin" />}
-          Translate with OpenAI
-        </button> */}
+          <button
+            type="button"
+            onClick={() => setAiModalOpen(true)}
+            disabled={translating !== null}
+            className="flex cursor-pointer items-center gap-2 rounded-md bg-amber-500/90 px-4 py-2 text-sm font-medium text-neutral-950 transition-colors hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Sparkles size={14} />
+            {t('actions.translateWithAI', { ns: 'ai' })}
+          </button>
 
           <div className="ml-auto flex gap-2">
             <button

@@ -34,5 +34,8 @@
     "invalidFormat": "Invalid format. Use .xml, .pak or .zip",
     "merged": "{{matched}} entries merged",
     "mergedWithIgnored": "{{matched}} entries merged ({{ignored}} ignored)"
+  },
+  "ai": {
+    "promptSaved": "Prompt saved"
   }
 }

@@ -1,4 +1,4 @@
-import { Loader2 } from 'lucide-react'
+import { Loader2, Sparkles } from 'lucide-react'
 import { useAppTranslation } from '@/i18n/useAppTranslation'
 
 interface BatchActionBarProps {
@@ -7,7 +7,8 @@ interface BatchActionBarProps {
   batchTotal: number
   onTranslateDeepL: () => void
   onTranslateGoogle: () => void
-  // onTranslateGPT: () => void
+  onTranslateAI: () => void
+  aiProviderName: string
   onCancelTranslation: () => void
   onClearSelection: () => void
   isTranslating: boolean
@@ -19,12 +20,13 @@ export function BatchActionBar({
   batchTotal,
   onTranslateDeepL,
   onTranslateGoogle,
-  // onTranslateGPT,
+  onTranslateAI,
+  aiProviderName,
   onCancelTranslation,
   onClearSelection,
   isTranslating
 }: BatchActionBarProps): React.JSX.Element | null {
-  const { t } = useAppTranslation(['translate', 'common'])
+  const { t } = useAppTranslation(['translate', 'common', 'ai'])
 
   if (selectedCount === 0 && !isTranslating) return null
 
@@ -56,6 +58,14 @@ export function BatchActionBar({
         <>
           <button
             type="button"
+            onClick={onTranslateAI}
+            className="flex cursor-pointer items-center gap-1.5 rounded-md bg-amber-500/90 px-3 py-1.5 text-sm font-medium text-neutral-950 transition-colors hover:bg-amber-500"
+          >
+            <Sparkles size={14} />
+            {t('actions.translateWithAIProvider', { ns: 'ai', provider: aiProviderName })}
+          </button>
+          <button
+            type="button"
             onClick={onTranslateDeepL}
             className="cursor-pointer rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
           >
@@ -68,13 +78,6 @@ export function BatchActionBar({
           >
             {t('batchBar.translateWithGoogle', { ns: 'translate' })}
           </button>
-          {/* <button
-            type="button"
-            onClick={onTranslateGPT}
-            className="cursor-pointer rounded-md bg-emerald-700 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-emerald-600"
-          >
-            Traduzir via GPT
-          </button> */}
         </>
       )}
 

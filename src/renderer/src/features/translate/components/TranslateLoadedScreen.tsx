@@ -3,6 +3,8 @@ import { AlreadyTranslatedDialog } from '@/components/translation/AlreadyTransla
 import { BatchActionBar } from '@/components/translation/BatchActionBar'
 import { QuotaExceededDialog } from '@/components/translation/QuotaExceededDialog'
 import { TranslationGrid } from '@/components/translation/TranslationGrid'
+import { getProviderMeta } from '@/features/settings/aiProviders'
+import { useAISettings } from '@/hooks/useAISettings'
 import { useAppTranslation } from '@/i18n/useAppTranslation'
 import type { Language } from '@/types'
 import { useBatchTranslation } from '../hooks/useBatchTranslation'
@@ -24,6 +26,7 @@ export function TranslateLoadedScreen({ session }: TranslateLoadedScreenProps): 
   const dictionarySave = useDictionarySave(session)
   const batch = useBatchTranslation(session)
   const exportFlow = useTranslationExport(session, languages)
+  const { provider: aiProvider } = useAISettings()
 
   const translatedCount = session.entries.filter((entry) => entry.target.trim() !== '').length
   const dictCount = session.entries.filter(
@@ -90,7 +93,8 @@ export function TranslateLoadedScreen({ session }: TranslateLoadedScreenProps): 
         batchTotal={batch.batchTotal}
         onTranslateDeepL={() => batch.batchTranslate('deepl')}
         onTranslateGoogle={() => batch.batchTranslate('google')}
-        // onTranslateGPT={() => batch.batchTranslate('openai')}
+        onTranslateAI={() => batch.batchTranslate(aiProvider)}
+        aiProviderName={getProviderMeta(aiProvider).name}
         onCancelTranslation={batch.cancelBatch}
         onClearSelection={session.clearSelection}
         isTranslating={batch.isBatchTranslating}
