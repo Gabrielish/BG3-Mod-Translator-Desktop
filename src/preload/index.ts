@@ -2,10 +2,14 @@ import { electronAPI } from '@electron-toolkit/preload'
 import type { IpcRendererEvent } from 'electron'
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type {
+  AiBatchPayload,
+  AiTranslatePayload,
   AppApi,
+  PromptSlot,
   TranslationBatchDoneEvent,
   TranslationBatchErrorEvent,
   TranslationBatchProgressEvent,
+  TranslationStartPayload,
   UnsubscribeFn
 } from './api-types'
 
@@ -17,15 +21,8 @@ function on<T>(channel: string, cb: (data: T) => void): UnsubscribeFn {
 
 const api: AppApi = {
   translation: {
-    start: (payload: {
-      provider: 'openai' | 'deepl' | 'manual'
-      filePath: string
-      modName: string
-      sourceLang: string
-      targetLang: string
-      apiKey?: string
-      author?: string
-    }): Promise<{ jobId: string }> => ipcRenderer.invoke('translation:start', payload),
+    start: (payload: TranslationStartPayload): Promise<{ jobId: string }> =>
+      ipcRenderer.invoke('translation:start', payload),
 
     cancel: (jobId: string): Promise<void> => ipcRenderer.invoke('translation:cancel', { jobId }),
 
@@ -333,6 +330,27 @@ const api: AppApi = {
     getAll: (): Promise<Record<string, string>> => ipcRenderer.invoke('config:getAll')
   },
 
+  ai: {
+    translate: (payload: AiTranslatePayload): Promise<string> =>
+      ipcRenderer.invoke('ai:translate', payload),
+
+    translateBatch: (payload: AiBatchPayload): Promise<{ jobId: string }> =>
+      ipcRenderer.invoke('ai:translateBatch', payload)
+  },
+
+  promptSlot: {
+    list: (): Promise<PromptSlot[]> => ipcRenderer.invoke('promptSlot:list'),
+
+    create: (params: { name: string; prompt: string }): Promise<PromptSlot> =>
+      ipcRenderer.invoke('promptSlot:create', params),
+
+    update: (params: { id: number; name?: string; prompt?: string }): Promise<PromptSlot> =>
+      ipcRenderer.invoke('promptSlot:update', params),
+
+    delete: (params: { id: number }): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke('promptSlot:delete', params)
+  },
+
   window: {
     minimize: (): Promise<void> => ipcRenderer.invoke('window:minimize'),
     maximize: (): Promise<void> => ipcRenderer.invoke('window:maximize'),
@@ -376,14 +394,10 @@ const api: AppApi = {
     getUsage: (payload: { service: import('./api-types').MetricsService }) =>
       ipcRenderer.invoke('metrics:getUsage', payload),
     getAllUsage: () => ipcRenderer.invoke('metrics:getAllUsage'),
-    setLimit: (payload: {
-      service: import('./api-types').MetricsService
-      charLimit: number
-    }) => ipcRenderer.invoke('metrics:setLimit', payload),
-    setRenewalAt: (payload: {
-      service: import('./api-types').MetricsService
-      renewalAt: string
-    }) => ipcRenderer.invoke('metrics:setRenewalAt', payload),
+    setLimit: (payload: { service: import('./api-types').MetricsService; charLimit: number }) =>
+      ipcRenderer.invoke('metrics:setLimit', payload),
+    setRenewalAt: (payload: { service: import('./api-types').MetricsService; renewalAt: string }) =>
+      ipcRenderer.invoke('metrics:setRenewalAt', payload),
     setConsumed: (payload: {
       service: import('./api-types').MetricsService
       consumedChars: number

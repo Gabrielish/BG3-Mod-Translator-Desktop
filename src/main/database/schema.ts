@@ -91,6 +91,16 @@ export const config = sqliteTable('config', {
   value: text('value')
 })
 
+// Named AI prompt slots (ID · NAME · PROMPT). The seeded default (isDefault=1) is locked:
+// editing it in the UI forks a new row instead of overwriting it.
+export const promptSlot = sqliteTable('prompt_slot', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull(),
+  prompt: text('prompt').notNull(),
+  isDefault: integer('is_default').notNull().default(0),
+  ...timestamps
+})
+
 export const translationUsage = sqliteTable('translation_usage', {
   service: text('service').primaryKey(),
   consumedChars: integer('consumed_chars').notNull().default(0),
@@ -135,3 +145,5 @@ export type TranslationUsage = typeof translationUsage.$inferSelect
 export type NewTranslationUsage = typeof translationUsage.$inferInsert
 export type TranslationRun = typeof translationRun.$inferSelect
 export type NewTranslationRun = typeof translationRun.$inferInsert
+export type PromptSlotRow = typeof promptSlot.$inferSelect
+export type NewPromptSlotRow = typeof promptSlot.$inferInsert

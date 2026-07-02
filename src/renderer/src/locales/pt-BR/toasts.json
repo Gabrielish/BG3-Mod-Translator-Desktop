@@ -34,5 +34,8 @@
     "invalidFormat": "Formato inválido. Use .xml, .pak ou .zip",
     "merged": "{{matched}} entradas mescladas",
     "mergedWithIgnored": "{{matched}} entradas mescladas ({{ignored}} ignoradas)"
+  },
+  "ai": {
+    "promptSaved": "Prompt salvo"
   }
 }

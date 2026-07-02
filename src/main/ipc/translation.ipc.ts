@@ -1,10 +1,23 @@
 import { randomUUID } from 'node:crypto'
+import { is } from '@electron-toolkit/utils'
 import { eq } from 'drizzle-orm'
 import { type BrowserWindow, ipcMain } from 'electron'
+import type {
+  AiBatchPayload,
+  AiProviderId,
+  AiTranslatePayload,
+  ConfigKey,
+  TranslationProvider
+} from '../../preload/api-types'
 import { getDb } from '../database/connection'
 import type { RepositoryRegistry } from '../database/repositories/registry'
 import { config } from '../database/schema'
+import type { AiPipelineSimilarity } from '../pipelines/ai.pipeline'
 import type { PipelineOptions } from '../pipelines/base.pipeline'
+import { aiTranslate, aiTranslateGroup } from '../services/ai/ai-translate.service'
+import { estimateTokens, packEntriesIntoGroups } from '../services/ai/batch-grouping'
+import { filterExamples } from '../services/ai/prompt-builder'
+import { isAiProvider, PROVIDER_CONFIG } from '../services/ai/provider-registry'
 import {
   translateText as translateDeepL,
   translateBatchDetailed as translateDeepLBatch
@@ -15,17 +28,26 @@ import {
 } from '../services/google.service'
 import { logError } from '../services/log.service'
 import { translateText as translateOpenAI } from '../services/openai.service'
+import { SimilarityIndex } from '../services/similarity.service'
 import { runTranslatePipeline, type TranslatePipelineParams } from '../services/translate.service'
 import type { UsageService } from '../services/usage.service'
 import { decodeEntities } from '../services/xml-entities.service'
 import { getActiveWindow } from '../utils/window'
 
-export type TranslationProvider = 'openai' | 'deepl' | 'google' | 'manual'
+export type { TranslationProvider }
 
 export interface TranslationStartPayload extends PipelineOptions {
   provider: TranslationProvider
   apiKey?: string
   model?: string
+}
+
+interface ResolvedAiConfig {
+  providerId: AiProviderId
+  apiKey: string
+  model: string
+  template: string
+  similarity: AiPipelineSimilarity
 }
 
 interface BatchPayload {
@@ -92,8 +114,19 @@ export function registerTranslationHandlers(
   usage: UsageService
 ): void {
   ipcMain.handle('translation:start', async (_event, payload: TranslationStartPayload) => {
+    let aiExtras: Partial<TranslatePipelineParams> = {}
     try {
-      requirePayloadApiKey(payload)
+      if (isAiProvider(payload.provider)) {
+        const resolved = resolveAiConfig(payload.provider, repos, payload.model)
+        aiExtras = {
+          apiKey: resolved.apiKey,
+          model: resolved.model,
+          promptTemplate: resolved.template,
+          similarity: resolved.similarity
+        }
+      } else {
+        requirePayloadApiKey(payload)
+      }
     } catch (err) {
       logError('translation.start.validation', err, {
         provider: payload.provider,
@@ -109,7 +142,8 @@ export function registerTranslationHandlers(
     const { cancel } = runTranslatePipeline({
       jobId,
       ...payload,
-      provider: payload.provider as TranslatePipelineParams['provider'],
+      ...aiExtras,
+      provider: payload.provider,
       onProgress: ({ current, total, source, target }) => {
         const win = getActiveWindow(getWindow)
         if (win) {
@@ -256,6 +290,326 @@ export function registerTranslationHandlers(
       return { jobId }
     }
   )
+
+  ipcMain.handle('ai:translate', async (_event, payload: AiTranslatePayload): Promise<string> => {
+    try {
+      const providerId = payload.provider ?? resolveActiveProvider()
+      const apiKey = resolveApiKey(providerId)
+      const model = resolveModel(providerId, payload.model)
+      const translated = await aiTranslate({
+        providerId,
+        apiKey,
+        model,
+        template: payload.prompt,
+        sourceText: payload.text,
+        targetText: '',
+        sourceLangName: languageName(repos, payload.sourceLang),
+        targetLangName: languageName(repos, payload.targetLang),
+        examples: payload.examples
+      })
+      return decodeEntities(translated)
+    } catch (err) {
+      logError('ai.translate', err, {
+        provider: payload.provider,
+        sourceLang: payload.sourceLang,
+        targetLang: payload.targetLang
+      })
+      throw err
+    }
+  })
+
+  ipcMain.handle(
+    'ai:translateBatch',
+    async (_event, payload: AiBatchPayload): Promise<{ jobId: string }> => {
+      let resolved: ResolvedAiConfig
+      try {
+        const providerId = payload.provider ?? resolveActiveProvider()
+        resolved = resolveAiConfig(providerId, repos)
+      } catch (err) {
+        logError('ai.translateBatch.validation', err, {
+          provider: payload.provider,
+          sourceLang: payload.sourceLang,
+          targetLang: payload.targetLang
+        })
+        throw err
+      }
+
+      const jobId = randomUUID()
+      const controller = new AbortController()
+      activeJobs.set(jobId, { cancel: () => controller.abort() })
+
+      void runAiBatchJob(
+        { ...payload, jobId, resolved, signal: controller.signal, getWindow },
+        repos
+      ).finally(() => {
+        activeJobs.delete(jobId)
+      })
+
+      return { jobId }
+    }
+  )
+}
+
+// --- AI config resolution (config table + prompt-slot repo) ---
+
+function readConfigValue(key: ConfigKey): string | null {
+  const db = getDb()
+  const row = db.select().from(config).where(eq(config.key, key)).get() as
+    | { key: string; value: string | null }
+    | undefined
+  const value = row?.value?.trim() ?? ''
+  return value.length > 0 ? value : null
+}
+
+function resolveActiveProvider(): AiProviderId {
+  const raw = readConfigValue('ai_provider')
+  return raw && isAiProvider(raw) ? raw : 'gemini'
+}
+
+function resolveApiKey(providerId: AiProviderId): string {
+  let key = readConfigValue(PROVIDER_CONFIG[providerId].keyConfigName)
+  // Dev convenience: fall back to the GEMINI_API_KEY in .env so testing works out of the box.
+  if (!key && providerId === 'gemini' && is.dev) {
+    key = process.env.GEMINI_API_KEY?.trim() || null
+  }
+  if (!key) {
+    throw new Error(`${PROVIDER_CONFIG[providerId].label} API key not configured. Go to Settings.`)
+  }
+  return key
+}
+
+function resolveModel(providerId: AiProviderId, override?: string): string {
+  return (
+    override?.trim() ||
+    readConfigValue(PROVIDER_CONFIG[providerId].modelConfigName) ||
+    PROVIDER_CONFIG[providerId].defaultModel
+  )
+}
+
+function resolveActiveTemplate(repos: RepositoryRegistry): string {
+  const slotIdRaw = readConfigValue('ai_active_prompt_slot')
+  if (slotIdRaw) {
+    const id = Number(slotIdRaw)
+    if (Number.isFinite(id)) {
+      const slot = repos.promptSlot.getById(id)
+      if (slot) return slot.prompt
+    }
+  }
+  const fallback = repos.promptSlot.getDefault()
+  if (!fallback) throw new Error('No default prompt configured')
+  return fallback.prompt
+}
+
+function resolveSimilarity(): AiPipelineSimilarity {
+  const enabled = readConfigValue('ai_similarity_enabled') !== 'false'
+  const count = clamp(Number.parseInt(readConfigValue('ai_similarity_count') ?? '', 10) || 3, 1, 10)
+  const minScore = clampFloat(
+    Number.parseFloat(readConfigValue('ai_similarity_min_score') ?? ''),
+    0,
+    1,
+    0.35
+  )
+  return { enabled, count, minScore }
+}
+
+function resolveAiConfig(
+  providerId: AiProviderId,
+  repos: RepositoryRegistry,
+  modelOverride?: string
+): ResolvedAiConfig {
+  return {
+    providerId,
+    apiKey: resolveApiKey(providerId),
+    model: resolveModel(providerId, modelOverride),
+    template: resolveActiveTemplate(repos),
+    similarity: resolveSimilarity()
+  }
+}
+
+function languageName(repos: RepositoryRegistry, code: string): string {
+  return repos.language.findByCode(code)?.name ?? code
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value))
+}
+
+function clampFloat(value: number, min: number, max: number, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback
+  return Math.min(max, Math.max(min, value))
+}
+
+interface AiBatchJobContext extends AiBatchPayload {
+  jobId: string
+  resolved: ResolvedAiConfig
+  signal: AbortSignal
+  getWindow: () => BrowserWindow | null
+}
+
+async function runAiBatchJob(ctx: AiBatchJobContext, repos: RepositoryRegistry): Promise<void> {
+  const summary: BatchSummary = { total: ctx.entries.length, translated: 0, failed: 0 }
+  const { providerId, apiKey, model, template, similarity } = ctx.resolved
+
+  const emitLineDone = (uid: string, translated: string): void => {
+    summary.translated++
+    emitBatchProgress(ctx.getWindow, {
+      jobId: ctx.jobId,
+      uid,
+      completed: summary.translated + summary.failed,
+      total: summary.total,
+      target: decodeEntities(translated)
+    })
+  }
+
+  const emitLineFailed = (uid: string, err: unknown): void => {
+    summary.failed++
+    emitBatchProgress(ctx.getWindow, {
+      jobId: ctx.jobId,
+      uid,
+      completed: summary.translated + summary.failed,
+      total: summary.total,
+      target: null,
+      error: err instanceof Error ? err.message : String(err)
+    })
+  }
+
+  try {
+    const index = similarity.enabled
+      ? new SimilarityIndex(repos.dictionary.getAllForSimilarity(ctx.sourceLang, ctx.targetLang))
+      : null
+    const sourceLangName = languageName(repos, ctx.sourceLang)
+    const targetLangName = languageName(repos, ctx.targetLang)
+
+    // Empty sources never reach the API - their translation is trivially empty.
+    const blankEntries = ctx.entries.filter((entry) => entry.source.trim() === '')
+    for (const entry of blankEntries) emitLineDone(entry.uid, '')
+
+    const examplesByUid = new Map<string, ReturnType<typeof filterExamples>>()
+    const pendingEntries = ctx.entries.filter((entry) => entry.source.trim() !== '')
+    for (const entry of pendingEntries) {
+      examplesByUid.set(
+        entry.uid,
+        index
+          ? filterExamples(index.search(entry.source, Math.max(1, similarity.count)), {
+              count: similarity.count,
+              minScore: similarity.minScore
+            })
+          : []
+      )
+    }
+
+    // Lines are packed into token-budgeted groups so the template is sent once per group
+    // instead of once per line (~95% less template overhead, ~15-20x fewer requests).
+    // See services/ai/batch-grouping.ts for the budget rationale.
+    const templateOverhead = estimateTokens(template) + 200 // + format/examples headings
+    const groups = packEntriesIntoGroups(pendingEntries, examplesByUid, templateOverhead)
+
+    // Modest concurrency: LLM APIs enforce requests-per-minute quotas (free tiers are tight),
+    // so avoid the burst a wide pool would cause. 429s additionally trigger a shared
+    // cooldown + retry inside the provider adapters (see services/ai/rate-limit.ts).
+    await runConcurrent(
+      groups,
+      3,
+      async (group) => {
+        throwIfAborted(ctx.signal)
+        let missedUids: string[]
+        try {
+          const result = await aiTranslateGroup({
+            providerId,
+            apiKey,
+            model,
+            template,
+            entries: group.entries,
+            sourceLangName,
+            targetLangName,
+            examples: group.examples,
+            signal: ctx.signal
+          })
+          for (const entry of group.entries) {
+            const translated = result.translations.get(entry.uid)
+            if (translated !== undefined) emitLineDone(entry.uid, translated)
+          }
+          missedUids = result.missedUids
+          if (missedUids.length > 0) {
+            logError(
+              'translation.batch.ai.groupMisses',
+              new Error(`Group reply missed ${missedUids.length}/${group.entries.length} lines`),
+              { jobId: ctx.jobId, provider: providerId, missedUids }
+            )
+          }
+        } catch (err) {
+          if (isAbortError(err) || ctx.signal.aborted) throw err
+          // Whole group request failed (e.g. retries exhausted) - retry each line alone so
+          // one bad request can't take the entire group down.
+          logError('translation.batch.ai.group', err, {
+            jobId: ctx.jobId,
+            provider: providerId,
+            lines: group.entries.length,
+            sourceLang: ctx.sourceLang,
+            targetLang: ctx.targetLang
+          })
+          missedUids = group.entries.map((entry) => entry.uid)
+        }
+
+        // Per-line fallback for anything the grouped reply did not cover.
+        for (const uid of missedUids) {
+          throwIfAborted(ctx.signal)
+          const entry = group.entries.find((e) => e.uid === uid)
+          if (!entry) continue
+          try {
+            const translated = await aiTranslate({
+              providerId,
+              apiKey,
+              model,
+              template,
+              sourceText: entry.source,
+              targetText: '',
+              sourceLangName,
+              targetLangName,
+              examples: examplesByUid.get(uid) ?? [],
+              signal: ctx.signal
+            })
+            emitLineDone(entry.uid, translated)
+          } catch (err) {
+            if (isAbortError(err) || ctx.signal.aborted) throw err
+            emitLineFailed(entry.uid, err)
+            logError('translation.batch.ai.entry', err, {
+              uid: entry.uid,
+              provider: providerId,
+              sourceLang: ctx.sourceLang,
+              targetLang: ctx.targetLang
+            })
+          }
+        }
+      },
+      ctx.signal
+    )
+
+    if (ctx.signal.aborted) summary.failed = summary.total - summary.translated
+
+    emitBatchDone(ctx.getWindow, {
+      jobId: ctx.jobId,
+      ...summary,
+      cancelled: ctx.signal.aborted
+    })
+  } catch (err) {
+    if (isAbortError(err) || ctx.signal.aborted) {
+      summary.failed = summary.total - summary.translated
+      emitBatchDone(ctx.getWindow, { jobId: ctx.jobId, ...summary, cancelled: true })
+      return
+    }
+    logError('translation.batch.ai.job', err, {
+      jobId: ctx.jobId,
+      provider: providerId,
+      sourceLang: ctx.sourceLang,
+      targetLang: ctx.targetLang,
+      total: ctx.entries.length
+    })
+    emitBatchError(ctx.getWindow, {
+      jobId: ctx.jobId,
+      message: err instanceof Error ? err.message : String(err)
+    })
+  }
 }
 
 function readApiKey(provider: 'openai' | 'deepl' | 'google'): string | null {
@@ -282,10 +636,11 @@ function requirePayloadApiKey(payload: TranslationStartPayload): void {
   }
 }
 
-function providerLabel(provider: 'openai' | 'deepl' | 'google'): string {
+function providerLabel(provider: TranslationProvider): string {
+  if (isAiProvider(provider)) return PROVIDER_CONFIG[provider].label
   if (provider === 'deepl') return 'DeepL'
   if (provider === 'google') return 'Google'
-  return 'OpenAI'
+  return 'Manual'
 }
 
 // Worker pool: runs fn over items with at most `concurrency` parallel executions

@@ -1,7 +1,56 @@
 import type { ElectronAPI } from '@electron-toolkit/preload'
 
 export type UnsubscribeFn = () => void
-export type TranslationProvider = 'openai' | 'deepl' | 'google' | 'manual'
+export type AiProviderId = 'openai' | 'anthropic' | 'gemini' | 'grok'
+export type TranslationProvider = AiProviderId | 'deepl' | 'google' | 'manual'
+
+// The four variables every translation prompt must contain. Highlighted in the editor and
+// validated before a prompt slot can be saved (shared by main + renderer).
+export const REQUIRED_PROMPT_VARS = [
+  'SOURCE_TEXT',
+  'SOURCE_LANGUAGE',
+  'TARGET_TEXT',
+  'TARGET_LANGUAGE'
+] as const
+
+export function missingPromptVars(template: string): string[] {
+  return REQUIRED_PROMPT_VARS.filter((v) => !template.includes(`{${v}}`))
+}
+
+// {ALL_CAPS} tokens that are not one of the required variables - almost always a typo
+// (e.g. {SOURCE_LAGUAGE}). They would reach the AI as literal text, so they block saving.
+// Lowercase/numeric braces ({0}, {1}) are game placeholders and stay untouched.
+export function unknownPromptVars(template: string): string[] {
+  const required = new Set<string>(REQUIRED_PROMPT_VARS)
+  const unknown = new Set<string>()
+  for (const match of template.matchAll(/\{([A-Z_]+)\}/g)) {
+    if (!required.has(match[1])) unknown.add(match[1])
+  }
+  return [...unknown]
+}
+
+// Sections the system appends to every rendered prompt (reference examples; the mandatory
+// response-format block that keeps grouped batch replies parseable). A template containing
+// them would duplicate/conflict with the appended blocks, so saving is blocked.
+export const RESERVED_PROMPT_HEADINGS = ['## Response format', '## Reference examples'] as const
+
+export function reservedPromptHeadings(template: string): string[] {
+  return RESERVED_PROMPT_HEADINGS.filter((heading) => template.includes(heading))
+}
+
+export interface AiSimilarityExample {
+  src: string
+  tgt: string
+}
+
+export interface PromptSlot {
+  id: number
+  name: string
+  prompt: string
+  isDefault: boolean
+  createdAt: string | null
+  updatedAt: string | null
+}
 
 export interface TranslationStartPayload {
   provider: TranslationProvider
@@ -162,6 +211,18 @@ export type ConfigKey =
   | 'openai_key'
   | 'deepl_key'
   | 'google_key'
+  | 'anthropic_key'
+  | 'gemini_key'
+  | 'grok_key'
+  | 'openai_model'
+  | 'anthropic_model'
+  | 'gemini_model'
+  | 'grok_model'
+  | 'ai_provider'
+  | 'ai_active_prompt_slot'
+  | 'ai_similarity_enabled'
+  | 'ai_similarity_count'
+  | 'ai_similarity_min_score'
   | 'last_source_lang'
   | 'last_target_lang'
   | 'app_language'
@@ -176,6 +237,7 @@ export type UserErrorCode =
   | 'common.noXmlForLanguage'
   | 'translation.apiKeyMissing'
   | 'translation.apiKeyRequired'
+  | 'translation.aiRateLimited'
   | 'translation.invalidProvider'
   | 'translation.noValidXml'
   | 'translation.invalidFormat'
@@ -395,6 +457,38 @@ export interface ConfigApi {
   getAll(): Promise<Record<string, string>>
 }
 
+export interface AiTranslatePayload {
+  // Omitted ⇒ the active provider stored in config is used.
+  provider?: AiProviderId
+  model?: string
+  text: string
+  sourceLang: string
+  targetLang: string
+  // The per-line template (may have been edited in the popup); rendered server-side.
+  prompt: string
+  examples: AiSimilarityExample[]
+}
+
+export interface AiBatchPayload {
+  provider?: AiProviderId
+  entries: { uid: string; source: string }[]
+  sourceLang: string
+  targetLang: string
+}
+
+// Batch progress/done/error reuse the existing translation:batch* events.
+export interface AiApi {
+  translate(payload: AiTranslatePayload): Promise<string>
+  translateBatch(payload: AiBatchPayload): Promise<{ jobId: string }>
+}
+
+export interface PromptSlotApi {
+  list(): Promise<PromptSlot[]>
+  create(params: { name: string; prompt: string }): Promise<PromptSlot>
+  update(params: { id: number; name?: string; prompt?: string }): Promise<PromptSlot>
+  delete(params: { id: number }): Promise<{ success: boolean }>
+}
+
 export interface WindowApi {
   minimize(): Promise<void>
   maximize(): Promise<void>
@@ -489,6 +583,8 @@ export interface AppApi {
   language: LanguageApi
   mod: ModApi
   config: ConfigApi
+  ai: AiApi
+  promptSlot: PromptSlotApi
   fs: FsApi
   log: LogApi
   xml: XmlApi

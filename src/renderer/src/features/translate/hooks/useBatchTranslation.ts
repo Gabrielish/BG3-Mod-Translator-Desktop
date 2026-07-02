@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { materializeSelectedEntries } from '@/context/TranslationSession'
+import { isAiProvider } from '@/features/settings/aiProviders'
 import { getLocalizedErrorMessage } from '@/i18n/errors'
 import { useAppTranslation } from '@/i18n/useAppTranslation'
 import type {
+  AiProviderId,
   TranslationBatchDoneEvent,
   TranslationBatchErrorEvent,
   TranslationBatchProgressEvent
@@ -11,6 +13,8 @@ import type {
 import type { TranslationSession } from '../types'
 
 type BatchEntry = { uid: string; source: string }
+// AI providers route to ai:translateBatch; DeepL/Google to the metered translation:batch.
+type BatchProvider = 'deepl' | 'google' | AiProviderId
 
 export interface QuotaExceededState {
   service: string
@@ -39,7 +43,7 @@ export function useBatchTranslation(session: TranslationSession) {
   const batchErrorsRef = useRef<Map<string, string>>(new Map())
   const pendingAllEntriesRef = useRef<BatchEntry[]>([])
   const pendingUntranslatedEntriesRef = useRef<BatchEntry[]>([])
-  const pendingProviderRef = useRef<'openai' | 'deepl' | 'google'>('deepl')
+  const pendingProviderRef = useRef<BatchProvider>('deepl')
   const { sourceLang, targetLang, updateEntry, clearSelection, selectEntries } = session
 
   const clearListeners = useCallback(() => {
@@ -76,7 +80,7 @@ export function useBatchTranslation(session: TranslationSession) {
   }, [clearListeners])
 
   const dispatchBatchEntries = useCallback(
-    async (entriesToSend: BatchEntry[], provider: 'openai' | 'deepl' | 'google') => {
+    async (entriesToSend: BatchEntry[], provider: BatchProvider) => {
       pendingUidsRef.current = new Set(entriesToSend.map((e) => e.uid))
       batchErrorsRef.current = new Map()
       setBatchCompleted(0)
@@ -144,7 +148,7 @@ export function useBatchTranslation(session: TranslationSession) {
                   translated,
                   total,
                   failed,
-                  error: firstError
+                  error: getLocalizedErrorMessage(new Error(firstError), t)
                 })
               : t('batchBar.partial', {
                   ns: 'translate',
@@ -184,12 +188,19 @@ export function useBatchTranslation(session: TranslationSession) {
       }
 
       try {
-        const { jobId } = await window.api.translation.batch({
-          entries: entriesToSend,
-          provider,
-          sourceLang,
-          targetLang
-        })
+        const { jobId } = isAiProvider(provider)
+          ? await window.api.ai.translateBatch({
+              entries: entriesToSend,
+              provider,
+              sourceLang,
+              targetLang
+            })
+          : await window.api.translation.batch({
+              entries: entriesToSend,
+              provider,
+              sourceLang,
+              targetLang
+            })
         activeJobIdRef.current = jobId
         setActiveJobId(jobId)
       } catch (err) {
@@ -256,7 +267,7 @@ export function useBatchTranslation(session: TranslationSession) {
   )
 
   const checkQuotaAndDispatch = useCallback(
-    async (entriesToSend: BatchEntry[], provider: 'openai' | 'deepl' | 'google') => {
+    async (entriesToSend: BatchEntry[], provider: BatchProvider) => {
       if (provider === 'deepl' || provider === 'google') {
         try {
           const usage = await window.api.metrics.getUsage({ service: provider })
@@ -316,7 +327,7 @@ export function useBatchTranslation(session: TranslationSession) {
   }, [])
 
   const batchTranslate = useCallback(
-    async (provider: 'openai' | 'deepl' | 'google') => {
+    async (provider: BatchProvider) => {
       if (isBatchTranslating) return
 
       const materialized = materializeSelectedEntries(session)

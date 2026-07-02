@@ -46,6 +46,9 @@ export interface TranslatedEntry extends LocalizationEntry {
 
 export abstract class BasePipeline {
   protected ctx!: PipelineContext
+  // How many similar entries to pull as translation context per line. Subclasses (e.g. the
+  // AI pipeline) raise this to their configured example count; MT pipelines ignore context.
+  protected similarityLimit = 5
   private dictRepo!: DictionaryRepository
   private languageRepo!: LanguageRepository
   private modRepo!: ModRepository
@@ -224,7 +227,7 @@ export abstract class BasePipeline {
     }
 
     // cache miss - translate via subclass
-    const context = this.similarityIndex.search(entry.text, 5)
+    const context = this.similarityIndex.search(entry.text, this.similarityLimit)
     const translated = await this.translate(entry.text, sourceLang, targetLang, context)
 
     this.dictRepo.upsert({

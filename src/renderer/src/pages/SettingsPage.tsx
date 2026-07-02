@@ -1,10 +1,13 @@
-import { useEffect, useState } from 'react'
 import { Copy, FolderOpen, Settings, Trash2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { ThemedSelect } from '@/components/shared/ThemedSelect'
+import { AiProvidersCard } from '@/features/settings/AiProvidersCard'
+import { PromptSlotsCard } from '@/features/settings/PromptSlotsCard'
+import { SimilaritySettingsCard } from '@/features/settings/SimilaritySettingsCard'
 import { useConfig } from '@/hooks/useConfig'
-import { getLocalizedErrorMessage } from '@/i18n/errors'
 import { i18n } from '@/i18n'
+import { getLocalizedErrorMessage } from '@/i18n/errors'
 import { defaultLanguage, languageLabels, supportedLanguages } from '@/i18n/languages'
 import { useAppTranslation } from '@/i18n/useAppTranslation'
 import type { ConfigKey } from '@/types'
@@ -138,6 +141,10 @@ export function SettingsPage(): React.JSX.Element {
           <p className="text-neutral-500 text-sm mt-1">{t('subtitle')}</p>
         </div>
 
+        <AiProvidersCard />
+        <PromptSlotsCard />
+        <SimilaritySettingsCard />
+
         <SettingsCard title={t('sections.apiKeys')}>
           {/* OpenAI key hidden until supported
           <SettingField
@@ -180,7 +187,9 @@ export function SettingsPage(): React.JSX.Element {
 
         <SettingsCard title={t('sections.language')}>
           <div className="flex max-w-sm flex-col gap-2">
-            <label className="text-sm font-medium text-neutral-300">{t('fields.appLanguage')}</label>
+            <label className="text-sm font-medium text-neutral-300">
+              {t('fields.appLanguage')}
+            </label>
             <ThemedSelect
               value={config['app_language'] || defaultLanguage}
               onChange={(value) => {
