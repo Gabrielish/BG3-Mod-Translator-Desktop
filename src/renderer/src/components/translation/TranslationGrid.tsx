@@ -11,12 +11,15 @@ import {
 } from 'react'
 import { toast } from 'sonner'
 import { HighlightedTextarea } from '@/components/shared/HighlightedTextarea'
+import { AITranslateModal } from '@/components/translation/AITranslateModal'
 import {
   type FilterSpec,
   materializeSelectedEntries,
   type TranslationSessionEntry,
   useTranslationSession
 } from '@/context/TranslationSession'
+import { getProviderMeta } from '@/features/settings/aiProviders'
+import { useAISettings } from '@/hooks/useAISettings'
 import { getLocalizedErrorMessage } from '@/i18n/errors'
 import { useAppTranslation } from '@/i18n/useAppTranslation'
 import { cn } from '@/lib/utils'
@@ -74,7 +77,7 @@ export function TranslationGrid({
   onEntrySave,
   viewMode
 }: TranslationGridProps): React.JSX.Element {
-  const { t } = useAppTranslation(['translate', 'common', 'toasts'])
+  const { t } = useAppTranslation(['translate', 'common', 'toasts', 'ai'])
   const session = useTranslationSession()
   const {
     selection,
@@ -93,6 +96,10 @@ export function TranslationGrid({
   const [pageSize, setPageSize] = useState<100 | 250 | 500 | 1000>(250)
   const [currentPage, setCurrentPage] = useState(1)
   const [stickyRowIds, setStickyRowIds] = useState<Set<string>>(() => new Set())
+  // Row the per-line "Translate with AI" modal is open for (null = closed).
+  const [aiEntry, setAiEntry] = useState<TranslationSessionEntry | null>(null)
+  const { provider: aiProvider } = useAISettings()
+  const aiMeta = getProviderMeta(aiProvider)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const textareaRefs = useRef<Map<string, HTMLTextAreaElement>>(new Map())
   const savedByEnterRef = useRef<Set<string>>(new Set())
@@ -241,6 +248,41 @@ export function TranslationGrid({
     updateEntryTarget(entry, value)
     markSticky(entry.rowId)
   }
+
+  // Per-row "Translate with AI" chip - opens the modal with similarity examples and the
+  // per-line prompt for that entry. Uses whichever provider is active in Settings.
+  const renderAiButton = (entry: TranslationSessionEntry) => (
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation()
+        setAiEntry(entry)
+      }}
+      className="inline-flex h-6 shrink-0 cursor-pointer items-center gap-1.5 rounded border border-[#1f2329] bg-[#131518] px-2 text-[11px] font-medium text-neutral-300 transition-colors hover:border-amber-500/60 hover:text-amber-400"
+    >
+      <span
+        className="flex h-3.5 w-3.5 items-center justify-center rounded-sm font-mono text-[7px] font-bold text-white"
+        style={{ background: aiMeta.color }}
+      >
+        {aiMeta.mark}
+      </span>
+      {t('grid.translateWith', { ns: 'ai', provider: aiMeta.short })}
+    </button>
+  )
+
+  const aiModal = aiEntry && (
+    <AITranslateModal
+      open
+      source={aiEntry.source}
+      sourceLang={sourceLang}
+      targetLang={targetLang}
+      onApply={(result) => {
+        updateEntryTarget(aiEntry, result)
+        markSticky(aiEntry.rowId)
+      }}
+      onClose={() => setAiEntry(null)}
+    />
+  )
 
   const handleEnterKey = (
     event: React.KeyboardEvent<HTMLTextAreaElement>,
@@ -601,24 +643,21 @@ export function TranslationGrid({
                       containerClassName="rounded-md"
                       className="field-sizing-content"
                     />
-                    <div className="pointer-events-none flex items-center gap-1.5 opacity-0 transition-opacity duration-150 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
-                      {/* <button
-                        type="button"
-                        className="inline-flex h-6 cursor-pointer items-center gap-1 rounded bg-transparent px-2 text-[11px] text-neutral-400 transition-colors hover:bg-[#1c1f24] hover:text-neutral-200"
-                      >
-                        <Sparkles size={11} /> Suggest AI
-                      </button> */}
-                      <button
-                        type="button"
-                        className="inline-flex h-6 cursor-pointer items-center gap-1 rounded bg-transparent px-2 text-[11px] text-neutral-400 transition-colors hover:bg-[#1c1f24] hover:text-neutral-200"
-                      >
-                        <BookOpen size={11} /> {t('grid.applyDictionary', { ns: 'translate' })}
-                      </button>
-                      <span className="ml-auto flex items-center gap-1 text-[11px] text-neutral-500">
-                        <KbdHint>Enter</KbdHint> {t('grid.next', { ns: 'translate' })}
-                        <span className="mx-1 text-neutral-700">-</span>
-                        <KbdHint>Shift Enter</KbdHint> {t('grid.newLine', { ns: 'translate' })}
-                      </span>
+                    <div className="flex items-center gap-1.5">
+                      {renderAiButton(entry)}
+                      <div className="pointer-events-none flex flex-1 items-center gap-1.5 opacity-0 transition-opacity duration-150 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+                        <button
+                          type="button"
+                          className="inline-flex h-6 cursor-pointer items-center gap-1 rounded bg-transparent px-2 text-[11px] text-neutral-400 transition-colors hover:bg-[#1c1f24] hover:text-neutral-200"
+                        >
+                          <BookOpen size={11} /> {t('grid.applyDictionary', { ns: 'translate' })}
+                        </button>
+                        <span className="ml-auto flex items-center gap-1 text-[11px] text-neutral-500">
+                          <KbdHint>Enter</KbdHint> {t('grid.next', { ns: 'translate' })}
+                          <span className="mx-1 text-neutral-700">-</span>
+                          <KbdHint>Shift Enter</KbdHint> {t('grid.newLine', { ns: 'translate' })}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -628,6 +667,7 @@ export function TranslationGrid({
         </div>
 
         {PaginationFooter}
+        {aiModal}
       </div>
     )
   }
@@ -799,13 +839,8 @@ export function TranslationGrid({
 
                       <div className="mt-1 flex items-center gap-2.5 border-t border-dashed border-[#1f2329] pt-1">
                         <LangTag accent>{targetLang.toUpperCase()}</LangTag>
+                        {renderAiButton(entry)}
                         <div className="pointer-events-none flex flex-1 items-center gap-1.5 opacity-0 transition-opacity duration-150 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
-                          {/* <button
-                            type="button"
-                            className="inline-flex h-6 cursor-pointer items-center gap-1 rounded bg-transparent px-2 text-[11px] text-neutral-400 transition-colors hover:bg-[#1c1f24] hover:text-neutral-200"
-                          >
-                            <Sparkles size={11} /> Suggest AI
-                          </button> */}
                           <button
                             type="button"
                             className="inline-flex h-6 cursor-pointer items-center gap-1 rounded bg-transparent px-2 text-[11px] text-neutral-400 transition-colors hover:bg-[#1c1f24] hover:text-neutral-200"
@@ -846,6 +881,7 @@ export function TranslationGrid({
       </div>
 
       {PaginationFooter}
+      {aiModal}
     </div>
   )
 }
