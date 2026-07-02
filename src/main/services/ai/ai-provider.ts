@@ -6,6 +6,9 @@ export interface AiChatRequest {
   model: string
   prompt: string
   signal?: AbortSignal
+  // Output cap for providers that require one (Anthropic). Grouped requests raise it,
+  // since their reply is the sum of many translations.
+  maxTokens?: number
 }
 
 // One interface, many senders. Every provider receives the same rendered prompt;

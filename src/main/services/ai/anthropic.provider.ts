@@ -9,7 +9,7 @@ const ANTHROPIC_VERSION = '2023-06-01'
 export class AnthropicProvider implements AiProvider {
   constructor(private readonly apiKey: string) {}
 
-  async chat({ model, prompt, signal }: AiChatRequest): Promise<string> {
+  async chat({ model, prompt, signal, maxTokens }: AiChatRequest): Promise<string> {
     const response = await requestWithRateLimit({
       providerId: 'anthropic',
       label: 'Anthropic',
@@ -25,7 +25,7 @@ export class AnthropicProvider implements AiProvider {
           signal,
           body: JSON.stringify({
             model,
-            max_tokens: 4000,
+            max_tokens: maxTokens ?? 4000,
             temperature: 0.3,
             messages: [{ role: 'user', content: prompt }]
           })

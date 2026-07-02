@@ -14,7 +14,8 @@ import type { RepositoryRegistry } from '../database/repositories/registry'
 import { config } from '../database/schema'
 import type { AiPipelineSimilarity } from '../pipelines/ai.pipeline'
 import type { PipelineOptions } from '../pipelines/base.pipeline'
-import { aiTranslate } from '../services/ai/ai-translate.service'
+import { aiTranslate, aiTranslateGroup } from '../services/ai/ai-translate.service'
+import { estimateTokens, packEntriesIntoGroups } from '../services/ai/batch-grouping'
 import { filterExamples } from '../services/ai/prompt-builder'
 import { isAiProvider, PROVIDER_CONFIG } from '../services/ai/provider-registry'
 import {
@@ -449,6 +450,29 @@ async function runAiBatchJob(ctx: AiBatchJobContext, repos: RepositoryRegistry):
   const summary: BatchSummary = { total: ctx.entries.length, translated: 0, failed: 0 }
   const { providerId, apiKey, model, template, similarity } = ctx.resolved
 
+  const emitLineDone = (uid: string, translated: string): void => {
+    summary.translated++
+    emitBatchProgress(ctx.getWindow, {
+      jobId: ctx.jobId,
+      uid,
+      completed: summary.translated + summary.failed,
+      total: summary.total,
+      target: decodeEntities(translated)
+    })
+  }
+
+  const emitLineFailed = (uid: string, err: unknown): void => {
+    summary.failed++
+    emitBatchProgress(ctx.getWindow, {
+      jobId: ctx.jobId,
+      uid,
+      completed: summary.translated + summary.failed,
+      total: summary.total,
+      target: null,
+      error: err instanceof Error ? err.message : String(err)
+    })
+  }
+
   try {
     const index = similarity.enabled
       ? new SimilarityIndex(repos.dictionary.getAllForSimilarity(ctx.sourceLang, ctx.targetLang))
@@ -456,58 +480,106 @@ async function runAiBatchJob(ctx: AiBatchJobContext, repos: RepositoryRegistry):
     const sourceLangName = languageName(repos, ctx.sourceLang)
     const targetLangName = languageName(repos, ctx.targetLang)
 
+    // Empty sources never reach the API - their translation is trivially empty.
+    const blankEntries = ctx.entries.filter((entry) => entry.source.trim() === '')
+    for (const entry of blankEntries) emitLineDone(entry.uid, '')
+
+    const examplesByUid = new Map<string, ReturnType<typeof filterExamples>>()
+    const pendingEntries = ctx.entries.filter((entry) => entry.source.trim() !== '')
+    for (const entry of pendingEntries) {
+      examplesByUid.set(
+        entry.uid,
+        index
+          ? filterExamples(index.search(entry.source, Math.max(1, similarity.count)), {
+              count: similarity.count,
+              minScore: similarity.minScore
+            })
+          : []
+      )
+    }
+
+    // Lines are packed into token-budgeted groups so the template is sent once per group
+    // instead of once per line (~95% less template overhead, ~15-20x fewer requests).
+    // See services/ai/batch-grouping.ts for the budget rationale.
+    const templateOverhead = estimateTokens(template) + 200 // + format/examples headings
+    const groups = packEntriesIntoGroups(pendingEntries, examplesByUid, templateOverhead)
+
     // Modest concurrency: LLM APIs enforce requests-per-minute quotas (free tiers are tight),
     // so avoid the burst a wide pool would cause. 429s additionally trigger a shared
     // cooldown + retry inside the provider adapters (see services/ai/rate-limit.ts).
     await runConcurrent(
-      ctx.entries,
+      groups,
       3,
-      async (entry) => {
+      async (group) => {
         throwIfAborted(ctx.signal)
+        let missedUids: string[]
         try {
-          const examples = index
-            ? filterExamples(index.search(entry.source, Math.max(1, similarity.count)), {
-                count: similarity.count,
-                minScore: similarity.minScore
-              })
-            : []
-          const translated = await aiTranslate({
+          const result = await aiTranslateGroup({
             providerId,
             apiKey,
             model,
             template,
-            sourceText: entry.source,
-            targetText: '',
+            entries: group.entries,
             sourceLangName,
             targetLangName,
-            examples,
+            examples: group.examples,
             signal: ctx.signal
           })
-          summary.translated++
-          emitBatchProgress(ctx.getWindow, {
-            jobId: ctx.jobId,
-            uid: entry.uid,
-            completed: summary.translated + summary.failed,
-            total: summary.total,
-            target: decodeEntities(translated)
-          })
+          for (const entry of group.entries) {
+            const translated = result.translations.get(entry.uid)
+            if (translated !== undefined) emitLineDone(entry.uid, translated)
+          }
+          missedUids = result.missedUids
+          if (missedUids.length > 0) {
+            logError(
+              'translation.batch.ai.groupMisses',
+              new Error(`Group reply missed ${missedUids.length}/${group.entries.length} lines`),
+              { jobId: ctx.jobId, provider: providerId, missedUids }
+            )
+          }
         } catch (err) {
           if (isAbortError(err) || ctx.signal.aborted) throw err
-          summary.failed++
-          emitBatchProgress(ctx.getWindow, {
+          // Whole group request failed (e.g. retries exhausted) - retry each line alone so
+          // one bad request can't take the entire group down.
+          logError('translation.batch.ai.group', err, {
             jobId: ctx.jobId,
-            uid: entry.uid,
-            completed: summary.translated + summary.failed,
-            total: summary.total,
-            target: null,
-            error: err instanceof Error ? err.message : String(err)
-          })
-          logError('translation.batch.ai.entry', err, {
-            uid: entry.uid,
             provider: providerId,
+            lines: group.entries.length,
             sourceLang: ctx.sourceLang,
             targetLang: ctx.targetLang
           })
+          missedUids = group.entries.map((entry) => entry.uid)
+        }
+
+        // Per-line fallback for anything the grouped reply did not cover.
+        for (const uid of missedUids) {
+          throwIfAborted(ctx.signal)
+          const entry = group.entries.find((e) => e.uid === uid)
+          if (!entry) continue
+          try {
+            const translated = await aiTranslate({
+              providerId,
+              apiKey,
+              model,
+              template,
+              sourceText: entry.source,
+              targetText: '',
+              sourceLangName,
+              targetLangName,
+              examples: examplesByUid.get(uid) ?? [],
+              signal: ctx.signal
+            })
+            emitLineDone(entry.uid, translated)
+          } catch (err) {
+            if (isAbortError(err) || ctx.signal.aborted) throw err
+            emitLineFailed(entry.uid, err)
+            logError('translation.batch.ai.entry', err, {
+              uid: entry.uid,
+              provider: providerId,
+              sourceLang: ctx.sourceLang,
+              targetLang: ctx.targetLang
+            })
+          }
         }
       },
       ctx.signal
