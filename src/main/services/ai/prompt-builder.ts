@@ -4,25 +4,25 @@ import type { SimilarEntry } from '../similarity.service'
 
 // Markdown-optimised default prompt. Seeded into the prompt_slot table as the locked
 // default; editing it in the UI forks a new slot instead of overwriting it.
-export const DEFAULT_PROMPT = `Você é um tradutor especializado em mods de **Baldur's Gate 3**, com domínio do universo de **Dungeons & Dragons** (5e).
+export const DEFAULT_PROMPT = `You are a translator specialized in **Baldur's Gate 3** mods, with deep knowledge of the **Dungeons & Dragons** (5e) universe.
 
-## Objetivo
-Traduzir de {SOURCE_LANGUAGE} para {TARGET_LANGUAGE} mantendo tom, lore e terminologia oficial.
+## Goal
+Translate from {SOURCE_LANGUAGE} to {TARGET_LANGUAGE}, preserving the tone, lore and official terminology.
 
-## Regras
-- Use as traduções **oficiais** de D&D — ex.: "Saving Throw" → "Teste de Resistência", "Spell Slot" → "Espaço de Magia", "Ability Check" → "Teste de Habilidade".
-- Preserve **exatamente** todas as tags XML e placeholders (\`<LSTag ...>\`, \`{0}\`, \`{1}\`) na mesma posição.
-- Mantenha o tom heroico/sombrio do jogo. Não adicione comentários.
+## Rules
+- Use the **official** D&D translations of the target language — e.g. in Brazilian Portuguese: "Saving Throw" → "Teste de Resistência", "Spell Slot" → "Espaço de Magia", "Ability Check" → "Teste de Habilidade".
+- Keep **all** XML tags and placeholders (\`<LSTag ...>\`, \`{0}\`, \`{1}\`) exactly as they are, in the same position.
+- Keep the game's heroic/dark tone. Do not add comments or explanations.
 
-## Entrada
-- Idioma de origem: {SOURCE_LANGUAGE}
-- Texto de origem: {SOURCE_TEXT}
-- Tradução atual (se houver): {TARGET_TEXT}
+## Input
+- Source language: {SOURCE_LANGUAGE}
+- Source text: {SOURCE_TEXT}
+- Current translation (if any): {TARGET_TEXT}
 
-Responda **apenas** com a tradução final em {TARGET_LANGUAGE}.`
+Reply with **only** the final translation in {TARGET_LANGUAGE}.`
 
 // Fixed, non-customisable block appended when similarity examples are included.
-const SIMILARITY_HEADING = '## Alguns exemplos de referência'
+const SIMILARITY_HEADING = '## Reference examples'
 
 export interface RenderPromptParams {
   template: string
