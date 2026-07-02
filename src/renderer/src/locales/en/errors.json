@@ -8,6 +8,7 @@
   "translation": {
     "apiKeyMissing": "The provider API key is not configured. Go to Settings.",
     "apiKeyRequired": "The provider API key is required.",
+    "aiRateLimited": "The AI provider's request limit was reached. Wait a moment and try again — the full details are in the application logs.",
     "invalidProvider": "Unknown translation provider.",
     "noValidXml": "No valid XML was found in the selected file.",
     "invalidFormat": "Invalid input format.",

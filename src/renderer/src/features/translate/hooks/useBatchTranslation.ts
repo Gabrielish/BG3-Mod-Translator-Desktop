@@ -148,7 +148,7 @@ export function useBatchTranslation(session: TranslationSession) {
                   translated,
                   total,
                   failed,
-                  error: firstError
+                  error: getLocalizedErrorMessage(new Error(firstError), t)
                 })
               : t('batchBar.partial', {
                   ns: 'translate',

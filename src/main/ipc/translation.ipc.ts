@@ -456,9 +456,12 @@ async function runAiBatchJob(ctx: AiBatchJobContext, repos: RepositoryRegistry):
     const sourceLangName = languageName(repos, ctx.sourceLang)
     const targetLangName = languageName(repos, ctx.targetLang)
 
+    // Modest concurrency: LLM APIs enforce requests-per-minute quotas (free tiers are tight),
+    // so avoid the burst a wide pool would cause. 429s additionally trigger a shared
+    // cooldown + retry inside the provider adapters (see services/ai/rate-limit.ts).
     await runConcurrent(
       ctx.entries,
-      10,
+      3,
       async (entry) => {
         throwIfAborted(ctx.signal)
         try {

@@ -51,7 +51,7 @@ export function isAiProvider(value: string): value is AiProviderId {
 export function createAiProvider(id: AiProviderId, apiKey: string): AiProvider {
   const config = PROVIDER_CONFIG[id]
   if (config.baseUrl) {
-    return new OpenAICompatibleProvider(config.baseUrl, apiKey, config.label)
+    return new OpenAICompatibleProvider(id, config.baseUrl, apiKey, config.label)
   }
   return new AnthropicProvider(apiKey)
 }

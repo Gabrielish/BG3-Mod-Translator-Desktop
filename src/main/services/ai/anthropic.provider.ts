@@ -1,4 +1,5 @@
 import type { AiChatRequest, AiProvider } from './ai-provider'
+import { requestWithRateLimit } from './rate-limit'
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages'
 const ANTHROPIC_VERSION = '2023-06-01'
@@ -9,20 +10,26 @@ export class AnthropicProvider implements AiProvider {
   constructor(private readonly apiKey: string) {}
 
   async chat({ model, prompt, signal }: AiChatRequest): Promise<string> {
-    const response = await fetch(ANTHROPIC_API_URL, {
-      method: 'POST',
-      headers: {
-        'x-api-key': this.apiKey,
-        'anthropic-version': ANTHROPIC_VERSION,
-        'Content-Type': 'application/json'
-      },
+    const response = await requestWithRateLimit({
+      providerId: 'anthropic',
+      label: 'Anthropic',
       signal,
-      body: JSON.stringify({
-        model,
-        max_tokens: 4000,
-        temperature: 0.3,
-        messages: [{ role: 'user', content: prompt }]
-      })
+      doRequest: () =>
+        fetch(ANTHROPIC_API_URL, {
+          method: 'POST',
+          headers: {
+            'x-api-key': this.apiKey,
+            'anthropic-version': ANTHROPIC_VERSION,
+            'Content-Type': 'application/json'
+          },
+          signal,
+          body: JSON.stringify({
+            model,
+            max_tokens: 4000,
+            temperature: 0.3,
+            messages: [{ role: 'user', content: prompt }]
+          })
+        })
     })
 
     if (!response.ok) {
