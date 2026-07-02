@@ -24,6 +24,9 @@
     "unknownVarsError": "Variáveis desconhecidas (erro de digitação?): {{vars}}. Corrija ou remova-as.",
     "unknownCount_one": "{{count}} variável desconhecida",
     "unknownCount_other": "{{count}} variáveis desconhecidas",
+    "reservedError": "Seções reservadas são anexadas automaticamente e não podem aparecer no prompt: {{sections}}",
+    "reservedCount_one": "{{count}} seção reservada",
+    "reservedCount_other": "{{count}} seções reservadas",
     "lockedNotice": "O prompt padrão não pode ser sobrescrito. Ao editá-lo, um novo slot será criado.",
     "editCreateCopy": "Editar (criar cópia)",
     "save": "Salvar prompt",
@@ -32,7 +35,7 @@
     "missingCount_one": "{{count}} variável obrigatória faltando",
     "missingCount_other": "{{count}} variáveis obrigatórias faltando",
     "tooltip": {
-      "text": "As variáveis entre chaves são substituídas em cada tradução. As quatro obrigatórias precisam existir no prompt para poder salvar.",
+      "text": "As variáveis entre chaves são substituídas em cada tradução. As quatro obrigatórias precisam existir no prompt para poder salvar. Na tradução em lote, {SOURCE_TEXT} recebe várias linhas numeradas de uma vez e uma seção obrigatória de formato de resposta é anexada automaticamente.",
       "example": "Traduza de {SOURCE_LANGUAGE} para {TARGET_LANGUAGE}:\n\n\"{SOURCE_TEXT}\""
     }
   },
@@ -64,5 +67,8 @@
   "actions": {
     "translateWithAI": "Traduzir com IA",
     "translateWithAIProvider": "Traduzir com {{provider}}"
+  },
+  "grid": {
+    "translateWith": "Traduzir · {{provider}}"
   }
 }

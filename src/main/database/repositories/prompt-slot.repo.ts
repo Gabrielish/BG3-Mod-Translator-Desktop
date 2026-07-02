@@ -1,7 +1,11 @@
 import { asc, eq, sql } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/better-sqlite3'
 import type { PromptSlot } from '../../../preload/api-types'
-import { missingPromptVars, unknownPromptVars } from '../../../preload/api-types'
+import {
+  missingPromptVars,
+  reservedPromptHeadings,
+  unknownPromptVars
+} from '../../../preload/api-types'
 import { type PromptSlotRow, promptSlot } from '../schema'
 
 type AppDb = ReturnType<typeof drizzle>
@@ -27,6 +31,10 @@ function assertVarsPresent(prompt: string): void {
   const unknown = unknownPromptVars(prompt)
   if (unknown.length > 0) {
     throw new Error(`Prompt contains unknown variables: ${unknown.map((v) => `{${v}}`).join(', ')}`)
+  }
+  const reserved = reservedPromptHeadings(prompt)
+  if (reserved.length > 0) {
+    throw new Error(`Prompt contains reserved sections: ${reserved.join(', ')}`)
   }
 }
 

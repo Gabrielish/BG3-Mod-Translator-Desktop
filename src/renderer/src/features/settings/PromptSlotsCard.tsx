@@ -6,7 +6,12 @@ import { useAISettings } from '@/hooks/useAISettings'
 import { usePromptSlots } from '@/hooks/usePromptSlots'
 import { getLocalizedErrorMessage } from '@/i18n/errors'
 import { useAppTranslation } from '@/i18n/useAppTranslation'
-import { missingPromptVars, REQUIRED_PROMPT_VARS, unknownPromptVars } from '@/types'
+import {
+  missingPromptVars,
+  REQUIRED_PROMPT_VARS,
+  reservedPromptHeadings,
+  unknownPromptVars
+} from '@/types'
 import { SettingsSectionCard } from './SettingsSectionCard'
 
 function VarChecklist({ prompt }: { prompt: string }): React.JSX.Element {
@@ -97,9 +102,10 @@ export function PromptSlotsCard(): React.JSX.Element {
   const isLocked = current?.isDefault ?? false
   const missing = missingPromptVars(draft)
   const unknown = unknownPromptVars(draft)
+  const reserved = reservedPromptHeadings(draft)
   // Live validation: the alert, the editor's red border and the disabled save button all
   // react to every keystroke instead of waiting for a save attempt.
-  const varsInvalid = missing.length > 0 || unknown.length > 0
+  const varsInvalid = missing.length > 0 || unknown.length > 0 || reserved.length > 0
   const showVarsError = !isLocked && varsInvalid
 
   const selectSlot = (id: number, prompt: string): void => {
@@ -250,6 +256,9 @@ export function PromptSlotsCard(): React.JSX.Element {
                 {t('slots.unknownVarsError', { vars: unknown.map((v) => `{${v}}`).join(', ') })}
               </span>
             )}
+            {reserved.length > 0 && (
+              <span>{t('slots.reservedError', { sections: reserved.join(', ') })}</span>
+            )}
           </div>
         </div>
       )}
@@ -296,9 +305,13 @@ export function PromptSlotsCard(): React.JSX.Element {
             <span className="text-neutral-500">
               {t('slots.missingCount', { count: missing.length })}
             </span>
-          ) : (
+          ) : unknown.length > 0 ? (
             <span className="text-neutral-500">
               {t('slots.unknownCount', { count: unknown.length })}
+            </span>
+          ) : (
+            <span className="text-neutral-500">
+              {t('slots.reservedCount', { count: reserved.length })}
             </span>
           )}
         </span>

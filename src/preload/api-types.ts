@@ -29,6 +29,15 @@ export function unknownPromptVars(template: string): string[] {
   return [...unknown]
 }
 
+// Sections the system appends to every rendered prompt (reference examples; the mandatory
+// response-format block that keeps grouped batch replies parseable). A template containing
+// them would duplicate/conflict with the appended blocks, so saving is blocked.
+export const RESERVED_PROMPT_HEADINGS = ['## Response format', '## Reference examples'] as const
+
+export function reservedPromptHeadings(template: string): string[] {
+  return RESERVED_PROMPT_HEADINGS.filter((heading) => template.includes(heading))
+}
+
 export interface AiSimilarityExample {
   src: string
   tgt: string
