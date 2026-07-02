@@ -19,13 +19,15 @@ export function renderPromptHighlight(text: string): ReactNode {
     const token = match[0]
     if (match[1]) {
       const name = token.slice(1, -1)
+      // No horizontal padding here: the overlay must keep the exact same text metrics as the
+      // transparent textarea underneath, or the caret drifts out of position after each token.
       parts.push(
         <span
           key={`v${key++}`}
           className={
             REQUIRED.has(name)
-              ? 'rounded-sm bg-amber-500/16 px-0.5 text-amber-400 shadow-[inset_0_0_0_1px_rgba(245,158,11,0.35)]'
-              : 'rounded-sm bg-red-500/14 px-0.5 text-red-400 underline decoration-red-500 decoration-wavy'
+              ? 'rounded-sm bg-amber-500/16 text-amber-400 shadow-[inset_0_0_0_1px_rgba(245,158,11,0.35)]'
+              : 'rounded-sm bg-red-500/14 text-red-400 underline decoration-red-500 decoration-wavy'
           }
         >
           {token}

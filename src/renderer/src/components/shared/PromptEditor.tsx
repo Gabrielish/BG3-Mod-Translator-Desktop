@@ -60,6 +60,7 @@ export function PromptEditor({
         onBlur={() => setFocused(false)}
         className={cn(
           'relative z-10 block w-full resize-y rounded-lg border border-transparent bg-transparent px-3.5 py-3 font-mono text-xs leading-[1.65] break-words whitespace-pre-wrap text-transparent caret-neutral-200 focus:outline-none',
+          '[&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-neutral-900 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-neutral-700 [&:hover::-webkit-scrollbar-thumb]:bg-neutral-600',
           minHeightClassName
         )}
       />

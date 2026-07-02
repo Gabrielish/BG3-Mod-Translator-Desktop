@@ -47,7 +47,7 @@ export function SimilaritySettingsCard(): React.JSX.Element {
         <button
           type="button"
           onClick={() => void set('ai_similarity_enabled', String(!similarity.enabled))}
-          className={`relative h-5.5 w-9.5 rounded-full border transition-colors ${
+          className={`relative h-5.5 w-9.5 cursor-pointer rounded-full border transition-colors ${
             similarity.enabled
               ? 'border-amber-500 bg-amber-500'
               : 'border-neutral-600 bg-neutral-800'
@@ -71,7 +71,7 @@ export function SimilaritySettingsCard(): React.JSX.Element {
             type="button"
             onClick={() => setCount(similarity.count - 1)}
             disabled={similarity.count <= 1}
-            className="flex h-8 w-7 items-center justify-center text-neutral-300 hover:bg-neutral-800 disabled:text-neutral-600"
+            className="flex h-8 w-7 cursor-pointer items-center justify-center text-neutral-300 hover:bg-neutral-800 disabled:cursor-not-allowed disabled:text-neutral-600"
           >
             −
           </button>
@@ -82,7 +82,7 @@ export function SimilaritySettingsCard(): React.JSX.Element {
             type="button"
             onClick={() => setCount(similarity.count + 1)}
             disabled={similarity.count >= 10}
-            className="flex h-8 w-7 items-center justify-center text-neutral-300 hover:bg-neutral-800 disabled:text-neutral-600"
+            className="flex h-8 w-7 cursor-pointer items-center justify-center text-neutral-300 hover:bg-neutral-800 disabled:cursor-not-allowed disabled:text-neutral-600"
           >
             +
           </button>
@@ -103,7 +103,7 @@ export function SimilaritySettingsCard(): React.JSX.Element {
           onChange={(e) =>
             void set('ai_similarity_min_score', String(Number(e.target.value) / 100))
           }
-          className="w-52 accent-amber-500"
+          className="w-52 cursor-pointer accent-amber-500"
         />
         <span className="w-12 text-right font-mono text-sm font-semibold text-amber-400 tabular-nums">
           {similarity.minScore.toFixed(2)}
