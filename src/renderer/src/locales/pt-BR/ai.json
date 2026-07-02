@@ -7,8 +7,7 @@
     "noKey": "sem chave",
     "showKey": "Mostrar",
     "hideKey": "Ocultar",
-    "save": "Salvar",
-    "saved": "Salvo",
+    "autoSaved": "As alterações são salvas automaticamente",
     "activeHint": "Botão de tradução ativo: {{provider}} · {{model}}"
   },
   "slots": {
@@ -22,6 +21,9 @@
     "editing": "Editando: {{name}}",
     "cannotSave": "Não é possível salvar.",
     "missingVarsError": "Faltam variáveis obrigatórias: {{vars}}",
+    "unknownVarsError": "Variáveis desconhecidas (erro de digitação?): {{vars}}. Corrija ou remova-as.",
+    "unknownCount_one": "{{count}} variável desconhecida",
+    "unknownCount_other": "{{count}} variáveis desconhecidas",
     "lockedNotice": "O prompt padrão não pode ser sobrescrito. Ao editá-lo, um novo slot será criado.",
     "editCreateCopy": "Editar (criar cópia)",
     "save": "Salvar prompt",

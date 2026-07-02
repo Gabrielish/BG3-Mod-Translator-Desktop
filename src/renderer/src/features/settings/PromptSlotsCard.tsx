@@ -6,14 +6,17 @@ import { useAISettings } from '@/hooks/useAISettings'
 import { usePromptSlots } from '@/hooks/usePromptSlots'
 import { getLocalizedErrorMessage } from '@/i18n/errors'
 import { useAppTranslation } from '@/i18n/useAppTranslation'
-import { missingPromptVars, REQUIRED_PROMPT_VARS } from '@/types'
+import { missingPromptVars, REQUIRED_PROMPT_VARS, unknownPromptVars } from '@/types'
 import { SettingsSectionCard } from './SettingsSectionCard'
 
 function VarChecklist({ prompt }: { prompt: string }): React.JSX.Element {
+  // Derive from the same validators used to gate saving, so badges and validation can't drift.
+  const missing = new Set(missingPromptVars(prompt))
+  const unknown = unknownPromptVars(prompt)
   return (
     <div className="mt-2.5 flex flex-wrap gap-1.5">
       {REQUIRED_PROMPT_VARS.map((v) => {
-        const present = prompt.includes(`{${v}}`)
+        const present = !missing.has(v)
         return (
           <span
             key={v}
@@ -28,6 +31,15 @@ function VarChecklist({ prompt }: { prompt: string }): React.JSX.Element {
           </span>
         )
       })}
+      {unknown.map((v) => (
+        <span
+          key={`unknown-${v}`}
+          className="inline-flex items-center gap-1 rounded border border-red-500/40 bg-red-500/10 px-2 py-0.5 font-mono text-[11px] text-red-400 line-through"
+        >
+          <AlertTriangle size={11} />
+          {`{${v}}`}
+        </span>
+      ))}
     </div>
   )
 }
@@ -52,15 +64,17 @@ function PromptTip(): React.JSX.Element {
 export function PromptSlotsCard(): React.JSX.Element {
   const { t } = useAppTranslation(['ai', 'common', 'toasts'])
   const { slots, create, update, remove } = usePromptSlots()
-  const { activePromptSlotId, set } = useAISettings()
+  const { activePromptSlotId, set, loading: configLoading } = useAISettings()
 
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [draft, setDraft] = useState('')
   const [dirty, setDirty] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [naming, setNaming] = useState(false)
   const [nameVal, setNameVal] = useState('')
   const nameInputRef = useRef<HTMLInputElement>(null)
+  // confirmName fires from both Enter and the input's blur (which follows the unmount after
+  // Enter) - this ref makes sure only one slot is created per naming session.
+  const nameSubmittedRef = useRef(false)
 
   const defaultSlot = slots.find((s) => s.isDefault)
 
@@ -68,26 +82,30 @@ export function PromptSlotsCard(): React.JSX.Element {
     if (naming) nameInputRef.current?.focus()
   }, [naming])
 
-  // Initialise selection once slots have loaded.
+  // Initialise selection once slots and config have loaded.
   useEffect(() => {
-    if (slots.length === 0 || selectedId !== null) return
+    if (configLoading || slots.length === 0 || selectedId !== null) return
     const preferred =
       activePromptSlotId && slots.some((s) => s.id === activePromptSlotId)
         ? activePromptSlotId
         : (defaultSlot?.id ?? slots[0].id)
     setSelectedId(preferred)
     setDraft(slots.find((s) => s.id === preferred)?.prompt ?? '')
-  }, [slots, selectedId, activePromptSlotId, defaultSlot])
+  }, [configLoading, slots, selectedId, activePromptSlotId, defaultSlot])
 
   const current = slots.find((s) => s.id === selectedId) ?? null
   const isLocked = current?.isDefault ?? false
   const missing = missingPromptVars(draft)
+  const unknown = unknownPromptVars(draft)
+  // Live validation: the alert, the editor's red border and the disabled save button all
+  // react to every keystroke instead of waiting for a save attempt.
+  const varsInvalid = missing.length > 0 || unknown.length > 0
+  const showVarsError = !isLocked && varsInvalid
 
   const selectSlot = (id: number, prompt: string): void => {
     setSelectedId(id)
     setDraft(prompt)
     setDirty(false)
-    setError(null)
     void set('ai_active_prompt_slot', String(id))
   }
 
@@ -105,29 +123,38 @@ export function PromptSlotsCard(): React.JSX.Element {
     }
   }
 
+  const openNaming = (): void => {
+    nameSubmittedRef.current = false
+    setNameVal('')
+    setNaming(true)
+  }
+
+  const cancelNaming = (): void => {
+    nameSubmittedRef.current = true
+    setNaming(false)
+    setNameVal('')
+  }
+
   const confirmName = async (): Promise<void> => {
+    if (nameSubmittedRef.current) return
+    nameSubmittedRef.current = true
+    const name = nameVal.trim() || t('slots.newSlotName')
     const seed = defaultSlot?.prompt ?? draft
+    setNaming(false)
+    setNameVal('')
     try {
-      const slot = await create(nameVal.trim() || t('slots.newSlotName'), seed)
+      const slot = await create(name, seed)
       selectSlot(slot.id, slot.prompt)
     } catch (err) {
       toast.error(getLocalizedErrorMessage(err, t))
-    } finally {
-      setNaming(false)
-      setNameVal('')
     }
   }
 
   const saveSlot = async (): Promise<void> => {
-    if (selectedId === null) return
-    if (missing.length > 0) {
-      setError(t('slots.missingVarsError', { vars: missing.map((v) => `{${v}}`).join(', ') }))
-      return
-    }
+    if (selectedId === null || varsInvalid) return
     try {
       await update(selectedId, { prompt: draft })
       setDirty(false)
-      setError(null)
       toast.success(t('ai.promptSaved', { ns: 'toasts' }))
     } catch (err) {
       toast.error(getLocalizedErrorMessage(err, t))
@@ -147,7 +174,6 @@ export function PromptSlotsCard(): React.JSX.Element {
   const onDraft = (value: string): void => {
     setDraft(value)
     setDirty(true)
-    if (error) setError(null)
   }
 
   return (
@@ -163,7 +189,7 @@ export function PromptSlotsCard(): React.JSX.Element {
             key={slot.id}
             type="button"
             onClick={() => pickSlot(slot.id)}
-            className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm transition-colors ${
+            className={`inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm transition-colors ${
               selectedId === slot.id
                 ? 'border-amber-500/60 bg-amber-500/10 text-amber-400'
                 : 'border-neutral-800 bg-[#0a0a0c] text-neutral-300 hover:border-neutral-700'
@@ -184,10 +210,7 @@ export function PromptSlotsCard(): React.JSX.Element {
             onChange={(e) => setNameVal(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') void confirmName()
-              if (e.key === 'Escape') {
-                setNaming(false)
-                setNameVal('')
-              }
+              if (e.key === 'Escape') cancelNaming()
             }}
             onBlur={() => void confirmName()}
             className="w-44 rounded-md border border-amber-500 bg-[#0a0a0c] px-2.5 py-1.5 text-sm text-neutral-200 focus:outline-none"
@@ -195,8 +218,8 @@ export function PromptSlotsCard(): React.JSX.Element {
         ) : (
           <button
             type="button"
-            onClick={() => setNaming(true)}
-            className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-neutral-700 px-2.5 py-1.5 text-sm text-neutral-400 transition-colors hover:border-amber-500 hover:text-amber-400"
+            onClick={openNaming}
+            className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-dashed border-neutral-700 px-2.5 py-1.5 text-sm text-neutral-400 transition-colors hover:border-amber-500 hover:text-amber-400"
           >
             <Plus size={13} /> {t('slots.newSlot')}
           </button>
@@ -208,15 +231,25 @@ export function PromptSlotsCard(): React.JSX.Element {
         <PromptTip />
       </div>
 
-      <PromptEditor value={draft} onChange={onDraft} readOnly={isLocked} error={!!error} />
+      <PromptEditor value={draft} onChange={onDraft} readOnly={isLocked} error={showVarsError} />
 
       <VarChecklist prompt={draft} />
 
-      {error && (
+      {showVarsError && (
         <div className="mt-3 flex items-start gap-2 rounded-lg border border-red-500/35 bg-red-500/10 px-3 py-2.5 text-sm text-red-300">
           <AlertTriangle size={15} className="mt-0.5 shrink-0 text-red-400" />
-          <div>
-            <strong>{t('slots.cannotSave')}</strong> {error}
+          <div className="flex flex-col gap-0.5">
+            <strong>{t('slots.cannotSave')}</strong>
+            {missing.length > 0 && (
+              <span>
+                {t('slots.missingVarsError', { vars: missing.map((v) => `{${v}}`).join(', ') })}
+              </span>
+            )}
+            {unknown.length > 0 && (
+              <span>
+                {t('slots.unknownVarsError', { vars: unknown.map((v) => `{${v}}`).join(', ') })}
+              </span>
+            )}
           </div>
         </div>
       )}
@@ -233,7 +266,7 @@ export function PromptSlotsCard(): React.JSX.Element {
           <button
             type="button"
             onClick={() => void forkDefault()}
-            className="inline-flex items-center gap-1.5 rounded-md bg-amber-500/90 px-4 py-2 text-sm font-medium text-neutral-950 transition-colors hover:bg-amber-500"
+            className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-amber-500/90 px-4 py-2 text-sm font-medium text-neutral-950 transition-colors hover:bg-amber-500"
           >
             <Pencil size={13} /> {t('slots.editCreateCopy')}
           </button>
@@ -242,26 +275,30 @@ export function PromptSlotsCard(): React.JSX.Element {
             <button
               type="button"
               onClick={() => void saveSlot()}
-              disabled={!dirty}
-              className="inline-flex items-center gap-1.5 rounded-md bg-amber-500/90 px-4 py-2 text-sm font-medium text-neutral-950 transition-colors hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={!dirty || varsInvalid}
+              className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-amber-500/90 px-4 py-2 text-sm font-medium text-neutral-950 transition-colors hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Check size={13} /> {t('slots.save')}
             </button>
             <button
               type="button"
               onClick={() => void deleteSlot()}
-              className="inline-flex items-center gap-1.5 rounded-md border border-neutral-800 px-4 py-2 text-sm text-neutral-300 transition-colors hover:bg-neutral-800"
+              className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-neutral-800 px-4 py-2 text-sm text-neutral-300 transition-colors hover:bg-neutral-800"
             >
               <Trash2 size={13} /> {t('slots.delete')}
             </button>
           </>
         )}
         <span className="ml-auto text-xs">
-          {missing.length === 0 ? (
+          {!varsInvalid ? (
             <span className="text-amber-400">{t('slots.allVarsPresent')}</span>
-          ) : (
+          ) : missing.length > 0 ? (
             <span className="text-neutral-500">
               {t('slots.missingCount', { count: missing.length })}
+            </span>
+          ) : (
+            <span className="text-neutral-500">
+              {t('slots.unknownCount', { count: unknown.length })}
             </span>
           )}
         </span>

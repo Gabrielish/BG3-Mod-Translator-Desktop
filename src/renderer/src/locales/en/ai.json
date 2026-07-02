@@ -7,8 +7,7 @@
     "noKey": "no key",
     "showKey": "Show",
     "hideKey": "Hide",
-    "save": "Save",
-    "saved": "Saved",
+    "autoSaved": "Changes are saved automatically",
     "activeHint": "Active translation button: {{provider}} · {{model}}"
   },
   "slots": {
@@ -22,6 +21,9 @@
     "editing": "Editing: {{name}}",
     "cannotSave": "Cannot save.",
     "missingVarsError": "Missing required variables: {{vars}}",
+    "unknownVarsError": "Unknown variables (typo?): {{vars}}. Fix or remove them.",
+    "unknownCount_one": "{{count}} unknown variable",
+    "unknownCount_other": "{{count}} unknown variables",
     "lockedNotice": "The default prompt cannot be overwritten. Editing it creates a new slot.",
     "editCreateCopy": "Edit (create a copy)",
     "save": "Save prompt",

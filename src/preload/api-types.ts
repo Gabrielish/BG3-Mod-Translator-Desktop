@@ -17,6 +17,18 @@ export function missingPromptVars(template: string): string[] {
   return REQUIRED_PROMPT_VARS.filter((v) => !template.includes(`{${v}}`))
 }
 
+// {ALL_CAPS} tokens that are not one of the required variables - almost always a typo
+// (e.g. {SOURCE_LAGUAGE}). They would reach the AI as literal text, so they block saving.
+// Lowercase/numeric braces ({0}, {1}) are game placeholders and stay untouched.
+export function unknownPromptVars(template: string): string[] {
+  const required = new Set<string>(REQUIRED_PROMPT_VARS)
+  const unknown = new Set<string>()
+  for (const match of template.matchAll(/\{([A-Z_]+)\}/g)) {
+    if (!required.has(match[1])) unknown.add(match[1])
+  }
+  return [...unknown]
+}
+
 export interface AiSimilarityExample {
   src: string
   tgt: string
@@ -216,6 +228,7 @@ export type UserErrorCode =
   | 'common.noXmlForLanguage'
   | 'translation.apiKeyMissing'
   | 'translation.apiKeyRequired'
+  | 'translation.aiRateLimited'
   | 'translation.invalidProvider'
   | 'translation.noValidXml'
   | 'translation.invalidFormat'
