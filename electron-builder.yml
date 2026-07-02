@@ -1,6 +1,6 @@
 appId: com.icosa.bg3-mod-translator
 productName: Icosa
-buildVersion: 1.9.0
+buildVersion: 1.9.1
 copyright: Copyright © 2026 kaironn
 directories:
   buildResources: build
@@ -18,6 +18,11 @@ files:
 asarUnpack:
   - resources/**
   - drizzle/**
+  # napi-rs native binding for lz4-napi (pak compression). Its .node lives in a
+  # platform-specific package that must sit on the real filesystem - dlopen can't read
+  # it from inside app.asar. '**/*.node' also covers any future native dependency.
+  - '**/*.node'
+  - node_modules/@antoniomuso/**
 win:
   executableName: Icosa
   icon: build/icon.ico

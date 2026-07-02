@@ -1,6 +1,6 @@
 {
   "name": "icosa",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "private": true,
   "description": "Desktop translator for Baldur's Gate 3 mod localization.",
   "main": "./out/main/index.js",
@@ -55,6 +55,9 @@
     "recharts": "^3.8.1",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0"
+  },
+  "optionalDependencies": {
+    "@antoniomuso/lz4-napi-win32-x64-msvc": "2.9.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.14",
