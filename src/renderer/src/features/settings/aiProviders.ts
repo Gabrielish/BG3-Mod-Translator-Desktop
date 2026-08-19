@@ -58,6 +58,17 @@ export const AI_PROVIDERS: AiProviderMeta[] = [
     keyConfigKey: 'grok_key',
     modelConfigKey: 'grok_model',
     keyPlaceholder: 'xai-...'
+  },
+  {
+    id: 'zai',
+    name: 'Z.AI',
+    short: 'GLM',
+    mark: 'ZA',
+    color: '#8b8b8b',
+    models: ['glm-5.3', 'glm-5.2', 'glm-5-turbo', 'glm-4.7'],
+    keyConfigKey: 'zai_key',
+    modelConfigKey: 'zai_model',
+    keyPlaceholder: 'Z.AI API Key'
   }
 ]
 
@@ -68,7 +79,8 @@ export const DEFAULT_MODELS: Record<AiProviderId, string> = {
   openai: 'gpt-4o-mini',
   anthropic: 'claude-sonnet-5',
   gemini: 'gemini-2.5-flash',
-  grok: 'grok-4'
+  grok: 'grok-4',
+  zai: 'glm-5.3'
 }
 
 export function isAiProvider(value: string | undefined | null): value is AiProviderId {
