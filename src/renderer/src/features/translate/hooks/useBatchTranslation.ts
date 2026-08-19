@@ -8,7 +8,9 @@ import type {
   AiProviderId,
   TranslationBatchDoneEvent,
   TranslationBatchErrorEvent,
-  TranslationBatchProgressEvent
+  TranslationBatchProgressEvent,
+  TranslationBatchWaitingEvent,
+  TranslationBatchWaitingReason
 } from '@/types'
 import type { TranslationSession } from '../types'
 
@@ -27,12 +29,20 @@ export interface QuotaExceededState {
   provider: 'deepl' | 'google'
 }
 
+export interface BatchWaitingState {
+  until: number
+  attempt: number
+  maxAttempts: number
+  reason: TranslationBatchWaitingReason
+}
+
 export function useBatchTranslation(session: TranslationSession) {
   const { t } = useAppTranslation(['translate', 'toasts', 'common', 'errors'])
   const [isBatchTranslating, setIsBatchTranslating] = useState(false)
   const [activeJobId, setActiveJobId] = useState<string | null>(null)
   const [batchCompleted, setBatchCompleted] = useState(0)
   const [batchTotal, setBatchTotal] = useState(0)
+  const [waiting, setWaiting] = useState<BatchWaitingState | null>(null)
   const [pendingDecision, setPendingDecision] = useState(false)
   const [pendingTranslatedCount, setPendingTranslatedCount] = useState(0)
   const [pendingUntranslatedCount, setPendingUntranslatedCount] = useState(0)
@@ -70,6 +80,7 @@ export function useBatchTranslation(session: TranslationSession) {
       setActiveJobId(null)
       setBatchCompleted(0)
       setBatchTotal(0)
+      setWaiting(null)
       setIsBatchTranslating(false)
     },
     [clearListeners]
@@ -98,6 +109,7 @@ export function useBatchTranslation(session: TranslationSession) {
         total
       }: TranslationBatchProgressEvent) => {
         if (jobId !== activeJobIdRef.current) return
+        setWaiting(null)
         setBatchCompleted(completed)
         setBatchTotal(total)
         if (target === null) {
@@ -178,13 +190,31 @@ export function useBatchTranslation(session: TranslationSession) {
         finishBatchJob(jobId)
       }
 
+      const handleBatchWaiting = ({
+        jobId,
+        delayMs,
+        attempt,
+        maxAttempts,
+        reason
+      }: TranslationBatchWaitingEvent) => {
+        if (jobId !== activeJobIdRef.current) return
+        setWaiting({
+          until: Date.now() + delayMs,
+          attempt,
+          maxAttempts,
+          reason
+        })
+      }
+
       const offProgress = window.api.translation.onBatchProgress(handleBatchProgress)
       const offDone = window.api.translation.onBatchDone(handleBatchDone)
       const offError = window.api.translation.onBatchError(handleBatchError)
+      const offWaiting = window.api.translation.onBatchWaiting(handleBatchWaiting)
       batchCleanupRef.current = () => {
         offProgress()
         offDone()
         offError()
+        offWaiting()
       }
 
       try {
@@ -221,6 +251,7 @@ export function useBatchTranslation(session: TranslationSession) {
               setActiveJobId(null)
               setBatchCompleted(0)
               setBatchTotal(0)
+              setWaiting(null)
               setIsBatchTranslating(false)
               setQuotaExceeded({
                 service: parsed.service ?? provider,
@@ -245,6 +276,7 @@ export function useBatchTranslation(session: TranslationSession) {
         setActiveJobId(null)
         setBatchCompleted(0)
         setBatchTotal(0)
+        setWaiting(null)
         setIsBatchTranslating(false)
         toast.error(message)
         void window.api.log.write({
@@ -391,6 +423,7 @@ export function useBatchTranslation(session: TranslationSession) {
     isBatchTranslating,
     batchCompleted,
     batchTotal,
+    waiting,
     batchTranslate,
     cancelBatch,
     activeJobId,

@@ -104,7 +104,10 @@
   "batchBar": {
     "selectedCount_one": "{{count}} entry selected",
     "selectedCount_other": "{{count}} entries selected",
+    "chooseAiProvider": "Choose AI provider",
     "translating": "Translating {{completed}} / {{total}}",
+    "rateLimitedWait": "Rate limited — waiting {{seconds}}s to retry ({{attempt}}/{{max}}). Taking longer than expected — you can stop.",
+    "pacingWait": "Pacing requests to stay under the provider limit (next in {{seconds}}s). You can stop if this is too slow.",
     "stop": "Stop",
     "translateWithDeepL": "Translate with DeepL",
     "translateWithGoogle": "Translate with Google",

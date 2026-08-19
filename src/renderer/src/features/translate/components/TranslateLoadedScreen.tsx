@@ -3,7 +3,7 @@ import { AlreadyTranslatedDialog } from '@/components/translation/AlreadyTransla
 import { BatchActionBar } from '@/components/translation/BatchActionBar'
 import { QuotaExceededDialog } from '@/components/translation/QuotaExceededDialog'
 import { TranslationGrid } from '@/components/translation/TranslationGrid'
-import { getProviderMeta } from '@/features/settings/aiProviders'
+import { AI_PROVIDERS } from '@/features/settings/aiProviders'
 import { useAISettings } from '@/hooks/useAISettings'
 import { useAppTranslation } from '@/i18n/useAppTranslation'
 import type { Language } from '@/types'
@@ -26,7 +26,7 @@ export function TranslateLoadedScreen({ session }: TranslateLoadedScreenProps): 
   const dictionarySave = useDictionarySave(session)
   const batch = useBatchTranslation(session)
   const exportFlow = useTranslationExport(session, languages)
-  const { provider: aiProvider } = useAISettings()
+  const { provider: aiProvider, keyFor } = useAISettings()
 
   const translatedCount = session.entries.filter((entry) => entry.target.trim() !== '').length
   const dictCount = session.entries.filter(
@@ -91,10 +91,16 @@ export function TranslateLoadedScreen({ session }: TranslateLoadedScreenProps): 
         selectedCount={session.selectedCount}
         batchCompleted={batch.batchCompleted}
         batchTotal={batch.batchTotal}
+        waiting={batch.waiting}
         onTranslateDeepL={() => batch.batchTranslate('deepl')}
         onTranslateGoogle={() => batch.batchTranslate('google')}
-        onTranslateAI={() => batch.batchTranslate(aiProvider)}
-        aiProviderName={getProviderMeta(aiProvider).name}
+        onTranslateAI={(providerId) => batch.batchTranslate(providerId)}
+        aiProviders={AI_PROVIDERS.map((meta) => ({
+          id: meta.id,
+          name: meta.name,
+          hasKey: keyFor(meta.id).trim().length > 0
+        }))}
+        activeAiProvider={aiProvider}
         onCancelTranslation={batch.cancelBatch}
         onClearSelection={session.clearSelection}
         isTranslating={batch.isBatchTranslating}
