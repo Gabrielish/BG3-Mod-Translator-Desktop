@@ -1,7 +1,7 @@
 import type { ElectronAPI } from '@electron-toolkit/preload'
 
 export type UnsubscribeFn = () => void
-export type AiProviderId = 'openai' | 'anthropic' | 'gemini' | 'grok'
+export type AiProviderId = 'openai' | 'anthropic' | 'gemini' | 'grok' | 'zai'
 export type TranslationProvider = AiProviderId | 'deepl' | 'google' | 'manual'
 
 // The four variables every translation prompt must contain. Highlighted in the editor and
@@ -214,10 +214,12 @@ export type ConfigKey =
   | 'anthropic_key'
   | 'gemini_key'
   | 'grok_key'
+  | 'zai_key'
   | 'openai_model'
   | 'anthropic_model'
   | 'gemini_model'
   | 'grok_model'
+  | 'zai_model'
   | 'ai_provider'
   | 'ai_active_prompt_slot'
   | 'ai_similarity_enabled'

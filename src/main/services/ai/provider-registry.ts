@@ -36,6 +36,13 @@ export const PROVIDER_CONFIG: Record<AiProviderId, ProviderConfig> = {
     defaultModel: 'grok-4',
     baseUrl: 'https://api.x.ai/v1'
   },
+  zai: {
+    label: 'Z.AI',
+    keyConfigName: 'zai_key',
+    modelConfigName: 'zai_model',
+    defaultModel: 'glm-5.3',
+    baseUrl: 'https://api.z.ai/api/coding/paas/v4'
+  },
   anthropic: {
     label: 'Anthropic',
     keyConfigName: 'anthropic_key',
