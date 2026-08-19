@@ -64,7 +64,7 @@ export const AI_PROVIDERS: AiProviderMeta[] = [
     name: 'Z.AI',
     short: 'GLM',
     mark: 'ZA',
-    color: '#8b8b8b',
+    color: '#e63131',
     models: ['glm-5.3', 'glm-5.2', 'glm-5-turbo', 'glm-4.7'],
     keyConfigKey: 'zai_key',
     modelConfigKey: 'zai_model',
