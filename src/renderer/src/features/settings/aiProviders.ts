@@ -1,4 +1,22 @@
-import type { AiProviderId, ConfigKey } from '@/types'
+import { AI_TUNING_RANGE, type AiProviderId, type ConfigKey, DEFAULT_AI_TUNING } from '@/types'
+
+export { AI_TUNING_RANGE, DEFAULT_AI_TUNING }
+
+export const CONCURRENCY_KEYS: Record<AiProviderId, ConfigKey> = {
+  openai: 'openai_concurrency',
+  anthropic: 'anthropic_concurrency',
+  gemini: 'gemini_concurrency',
+  grok: 'grok_concurrency',
+  zai: 'zai_concurrency'
+}
+
+export const BATCH_LINES_KEYS: Record<AiProviderId, ConfigKey> = {
+  openai: 'openai_batch_lines',
+  anthropic: 'anthropic_batch_lines',
+  gemini: 'gemini_batch_lines',
+  grok: 'grok_batch_lines',
+  zai: 'zai_batch_lines'
+}
 
 export interface AiProviderMeta {
   id: AiProviderId
@@ -21,7 +39,20 @@ export const AI_PROVIDERS: AiProviderMeta[] = [
     short: 'GPT',
     mark: 'AI',
     color: '#10a37f',
-    models: ['gpt-4o', 'gpt-4o-mini', 'o3-mini'],
+    models: [
+      'gpt-5.6-sol',
+      'gpt-5.6-terra',
+      'gpt-5.6-luna',
+      'gpt-5',
+      'gpt-5-mini',
+      'gpt-4.1',
+      'gpt-4.1-mini',
+      'gpt-4.1-nano',
+      'gpt-4o',
+      'gpt-4o-mini',
+      'o3-mini',
+      'o4-mini'
+    ],
     keyConfigKey: 'openai_key',
     modelConfigKey: 'openai_model',
     keyPlaceholder: 'sk-...'
@@ -32,7 +63,16 @@ export const AI_PROVIDERS: AiProviderMeta[] = [
     short: 'Claude',
     mark: 'AN',
     color: '#d97757',
-    models: ['claude-opus-4-8', 'claude-sonnet-5', 'claude-haiku-4-5-20251001'],
+    models: [
+      'claude-opus-5',
+      'claude-opus-4-8',
+      'claude-opus-4-6',
+      'claude-sonnet-5',
+      'claude-sonnet-4-6',
+      'claude-sonnet-4-5',
+      'claude-haiku-4-5',
+      'claude-haiku-4-5-20251001'
+    ],
     keyConfigKey: 'anthropic_key',
     modelConfigKey: 'anthropic_model',
     keyPlaceholder: 'sk-ant-...'
@@ -43,7 +83,13 @@ export const AI_PROVIDERS: AiProviderMeta[] = [
     short: 'Gemini',
     mark: 'GM',
     color: '#4285f4',
-    models: ['gemini-2.5-pro', 'gemini-2.5-flash'],
+    models: [
+      'gemini-2.5-pro',
+      'gemini-2.5-flash',
+      'gemini-2.5-flash-lite',
+      'gemini-2.0-flash',
+      'gemini-2.0-flash-lite'
+    ],
     keyConfigKey: 'gemini_key',
     modelConfigKey: 'gemini_model',
     keyPlaceholder: 'AIza... / AQ...'
@@ -54,7 +100,7 @@ export const AI_PROVIDERS: AiProviderMeta[] = [
     short: 'Grok',
     mark: 'GR',
     color: '#8b8b8b',
-    models: ['grok-4', 'grok-3'],
+    models: ['grok-4.6', 'grok-4.5', 'grok-4', 'grok-3', 'grok-3-mini'],
     keyConfigKey: 'grok_key',
     modelConfigKey: 'grok_model',
     keyPlaceholder: 'xai-...'
@@ -65,7 +111,7 @@ export const AI_PROVIDERS: AiProviderMeta[] = [
     short: 'GLM',
     mark: 'ZA',
     color: '#e63131',
-    models: ['glm-5.3', 'glm-5.2', 'glm-5-turbo', 'glm-4.7'],
+    models: ['glm-5.3', 'glm-5.2', 'glm-5-turbo', 'glm-4.7', 'glm-4.6', 'glm-4.5-air'],
     keyConfigKey: 'zai_key',
     modelConfigKey: 'zai_model',
     keyPlaceholder: 'Z.AI API Key'
