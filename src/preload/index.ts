@@ -9,6 +9,7 @@ import type {
   TranslationBatchDoneEvent,
   TranslationBatchErrorEvent,
   TranslationBatchProgressEvent,
+  TranslationBatchWaitingEvent,
   TranslationStartPayload,
   UnsubscribeFn
 } from './api-types'
@@ -63,7 +64,10 @@ const api: AppApi = {
       on('translation:batchDone', cb),
 
     onBatchError: (cb: (data: TranslationBatchErrorEvent) => void): UnsubscribeFn =>
-      on('translation:batchError', cb)
+      on('translation:batchError', cb),
+
+    onBatchWaiting: (cb: (data: TranslationBatchWaitingEvent) => void): UnsubscribeFn =>
+      on('translation:batchWaiting', cb)
   },
 
   dictionary: {

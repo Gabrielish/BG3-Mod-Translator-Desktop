@@ -14,6 +14,7 @@ export class AnthropicProvider implements AiProvider {
       providerId: 'anthropic',
       label: 'Anthropic',
       signal,
+      model,
       doRequest: () =>
         fetch(ANTHROPIC_API_URL, {
           method: 'POST',

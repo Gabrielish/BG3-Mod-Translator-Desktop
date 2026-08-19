@@ -1,6 +1,20 @@
 import type { AiChatRequest, AiProvider } from './ai-provider'
 import { requestWithRateLimit } from './rate-limit'
 
+const DEFAULT_TEMPERATURE = 0.3
+
+// GPT-5.x and the o-series (o1/o3/o4) only accept the API default temperature.
+function modelLocksTemperature(model: string): boolean {
+  const id = model.trim().toLowerCase()
+  return id.startsWith('gpt-5') || /^o[1-9]/.test(id)
+}
+
+function isTemperatureUnsupported(detail: string): boolean {
+  return /unsupported value.*temperature|temperature.*does not support|temperature.*only the default/i.test(
+    detail
+  )
+}
+
 // Single adapter for every OpenAI-compatible chat-completions API: OpenAI, Google Gemini
 // (its OpenAI-compat endpoint) and xAI Grok. They differ only by base URL + model + key.
 export class OpenAICompatibleProvider implements AiProvider {
@@ -12,10 +26,45 @@ export class OpenAICompatibleProvider implements AiProvider {
   ) {}
 
   async chat({ model, prompt, signal }: AiChatRequest): Promise<string> {
-    const response = await requestWithRateLimit({
+    const sendTemperature = this.providerId !== 'openai' || !modelLocksTemperature(model)
+    let response = await this.request(model, prompt, signal, sendTemperature)
+
+    if (!response.ok) {
+      const detail = await response.text().catch(() => response.statusText)
+      if (response.status === 400 && sendTemperature && isTemperatureUnsupported(detail)) {
+        response = await this.request(model, prompt, signal, false)
+        if (!response.ok) {
+          const retryDetail = await response.text().catch(() => response.statusText)
+          throw new Error(`${this.label} API error ${response.status}: ${retryDetail}`)
+        }
+      } else {
+        throw new Error(`${this.label} API error ${response.status}: ${detail}`)
+      }
+    }
+
+    const data = (await response.json()) as {
+      choices?: { message?: { content?: string } }[]
+    }
+    return data.choices?.[0]?.message?.content?.trim() ?? ''
+  }
+
+  private request(
+    model: string,
+    prompt: string,
+    signal: AbortSignal | undefined,
+    sendTemperature: boolean
+  ): Promise<Response> {
+    const body: Record<string, unknown> = {
+      model,
+      messages: [{ role: 'user', content: prompt }]
+    }
+    if (sendTemperature) body.temperature = DEFAULT_TEMPERATURE
+
+    return requestWithRateLimit({
       providerId: this.providerId,
       label: this.label,
       signal,
+      model,
       doRequest: () =>
         fetch(`${this.baseUrl}/chat/completions`, {
           method: 'POST',
@@ -24,22 +73,8 @@ export class OpenAICompatibleProvider implements AiProvider {
             'Content-Type': 'application/json'
           },
           signal,
-          body: JSON.stringify({
-            model,
-            temperature: 0.3,
-            messages: [{ role: 'user', content: prompt }]
-          })
+          body: JSON.stringify(body)
         })
     })
-
-    if (!response.ok) {
-      const detail = await response.text().catch(() => response.statusText)
-      throw new Error(`${this.label} API error ${response.status}: ${detail}`)
-    }
-
-    const data = (await response.json()) as {
-      choices?: { message?: { content?: string } }[]
-    }
-    return data.choices?.[0]?.message?.content?.trim() ?? ''
   }
 }

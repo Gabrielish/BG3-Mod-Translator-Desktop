@@ -8,7 +8,36 @@
     "showKey": "Show",
     "hideKey": "Hide",
     "autoSaved": "Changes are saved automatically",
-    "activeHint": "Active translation button: {{provider}} · {{model}}"
+    "activeHint": "Active translation button: {{provider}} · {{model}}",
+    "expand": "Show batch limits and tips",
+    "collapse": "Hide batch limits and tips",
+    "concurrency": "Concurrent requests",
+    "batchLines": "Lines per request",
+    "tips": {
+      "title": "Limits",
+      "free": "Free",
+      "paid": "Paid",
+      "openai": {
+        "free": "1 concurrent request, 5–10 lines",
+        "paid": "3–5 concurrent, 20 lines (default). Too high a value will 429."
+      },
+      "anthropic": {
+        "free": "New accounts: start at 1–2 concurrent",
+        "paid": "3–4 concurrent, 20 lines (default)"
+      },
+      "gemini": {
+        "free": "1 concurrent, 8 lines (Flash ~10 RPM, Pro ~5). Default stays here to avoid 429 loops.",
+        "paid": "3 concurrent, 20 lines"
+      },
+      "grok": {
+        "free": "No public free API",
+        "paid": "3 concurrent, 20 lines (default). Lower concurrency if you hit 429s."
+      },
+      "zai": {
+        "free": "Coding Plan Lite: 1 concurrent",
+        "paid": "Pro/Max: 2 concurrent, 20 lines (default)"
+      }
+    }
   },
   "slots": {
     "title": "Translation prompt",

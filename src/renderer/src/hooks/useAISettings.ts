@@ -1,6 +1,13 @@
-import { DEFAULT_AI_PROVIDER, DEFAULT_MODELS, isAiProvider } from '@/features/settings/aiProviders'
+import {
+  BATCH_LINES_KEYS,
+  CONCURRENCY_KEYS,
+  DEFAULT_AI_PROVIDER,
+  DEFAULT_AI_TUNING,
+  DEFAULT_MODELS,
+  isAiProvider
+} from '@/features/settings/aiProviders'
 import { useConfig } from '@/hooks/useConfig'
-import type { AiProviderId } from '@/types'
+import { AI_TUNING_RANGE, type AiProviderId } from '@/types'
 
 function clampInt(raw: string | undefined, min: number, max: number, fallback: number): number {
   const n = Number.parseInt(raw ?? '', 10)
@@ -34,8 +41,33 @@ export function useAISettings() {
 
   const modelFor = (id: AiProviderId): string => config[`${id}_model`] || DEFAULT_MODELS[id]
   const keyFor = (id: AiProviderId): string => config[`${id}_key`] ?? ''
+  const concurrencyFor = (id: AiProviderId): number =>
+    clampInt(
+      config[CONCURRENCY_KEYS[id]],
+      AI_TUNING_RANGE.concurrency.min,
+      AI_TUNING_RANGE.concurrency.max,
+      DEFAULT_AI_TUNING[id].concurrency
+    )
+  const batchLinesFor = (id: AiProviderId): number =>
+    clampInt(
+      config[BATCH_LINES_KEYS[id]],
+      AI_TUNING_RANGE.batchLines.min,
+      AI_TUNING_RANGE.batchLines.max,
+      DEFAULT_AI_TUNING[id].batchLines
+    )
 
-  return { config, loading, set, provider, similarity, activePromptSlotId, modelFor, keyFor }
+  return {
+    config,
+    loading,
+    set,
+    provider,
+    similarity,
+    activePromptSlotId,
+    modelFor,
+    keyFor,
+    concurrencyFor,
+    batchLinesFor
+  }
 }
 
 // Fuse returns a distance (0 = best); the UI shows similarity (higher = best).
