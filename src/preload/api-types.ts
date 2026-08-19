@@ -6,8 +6,8 @@ export type TranslationProvider = AiProviderId | 'deepl' | 'google' | 'manual'
 
 // Paid-tier defaults for batch pacing. Gemini stays on the free-tier floor.
 export const AI_TUNING_RANGE = {
-  concurrency: { min: 1, max: 8 },
-  batchLines: { min: 1, max: 40 }
+  concurrency: { min: 1, max: 20 },
+  batchLines: { min: 1, max: 100 }
 } as const
 
 export const DEFAULT_AI_TUNING: Record<AiProviderId, { concurrency: number; batchLines: number }> =

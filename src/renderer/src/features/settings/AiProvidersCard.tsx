@@ -41,6 +41,23 @@ function Stepper({
   max: number
   onChange: (value: number) => void
 }): React.JSX.Element {
+  const [draft, setDraft] = useState(String(value))
+
+  useEffect(() => {
+    setDraft(String(value))
+  }, [value])
+
+  const commit = (raw: string): void => {
+    const parsed = Number.parseInt(raw, 10)
+    if (!Number.isFinite(parsed)) {
+      setDraft(String(value))
+      return
+    }
+    const next = Math.min(max, Math.max(min, parsed))
+    setDraft(String(next))
+    if (next !== value) onChange(next)
+  }
+
   return (
     <div className="inline-flex items-center overflow-hidden rounded-md border border-neutral-800 bg-[#0a0a0c]">
       <button
@@ -51,9 +68,19 @@ function Stepper({
       >
         −
       </button>
-      <span className="min-w-8 border-x border-neutral-800 text-center font-mono text-sm text-neutral-200 tabular-nums">
-        {value}
-      </span>
+      <input
+        type="text"
+        inputMode="numeric"
+        value={draft}
+        aria-valuemin={min}
+        aria-valuemax={max}
+        onChange={(event) => setDraft(event.target.value.replace(/[^\d]/g, ''))}
+        onBlur={() => commit(draft)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') event.currentTarget.blur()
+        }}
+        className="h-8 w-12 border-x border-neutral-800 bg-transparent text-center font-mono text-sm text-neutral-200 tabular-nums focus:outline-none"
+      />
       <button
         type="button"
         onClick={() => onChange(value + 1)}
@@ -230,9 +257,21 @@ function ProviderRow({
               />
             </div>
           </div>
-          <p className="text-[11px] leading-relaxed text-neutral-500">
-            {t(`providers.tips.${meta.id}`)}
-          </p>
+          <div className="text-[11px] leading-relaxed text-neutral-500">
+            <div className="mb-1 font-medium text-neutral-400">{t('providers.tips.title')}</div>
+            <ul className="list-disc space-y-0.5 pl-4">
+              <li>
+                <span className="text-neutral-400">{t('providers.tips.free')}</span>
+                {' — '}
+                {t(`providers.tips.${meta.id}.free`)}
+              </li>
+              <li>
+                <span className="text-neutral-400">{t('providers.tips.paid')}</span>
+                {' — '}
+                {t(`providers.tips.${meta.id}.paid`)}
+              </li>
+            </ul>
+          </div>
         </div>
       ) : null}
     </div>
