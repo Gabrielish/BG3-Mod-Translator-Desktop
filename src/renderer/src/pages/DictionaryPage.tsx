@@ -628,7 +628,7 @@ export function DictionaryPage(): React.JSX.Element {
               setSourceLang('')
               setTargetLang('')
             }}
-            className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-md border border-dashed border-[#3a404a] px-3 text-xs text-neutral-400 transition-colors hover:bg-[#131518] hover:text-neutral-200"
+            className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-md border border-dashed border-[#2a2f37] px-3 text-xs text-neutral-400 transition-colors hover:bg-[#131518] hover:text-neutral-200"
           >
             <FilterX size={12} />
             {t('actions.clear', { ns: 'common' })}
@@ -666,7 +666,7 @@ export function DictionaryPage(): React.JSX.Element {
                     }
               )
             }
-            className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-red-500/30 bg-red-500/8 px-3 text-xs font-medium text-red-200 transition-colors hover:bg-red-500/14 disabled:cursor-not-allowed disabled:border-[#252a32] disabled:bg-[#131518] disabled:text-neutral-500"
+            className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-red-500/30 bg-red-500/8 px-3 text-xs font-medium text-red-200 transition-colors hover:bg-red-500/14 disabled:cursor-not-allowed disabled:border-[#2a2f37] disabled:bg-[#131518] disabled:text-neutral-500"
           >
             <Trash2 size={13} />
             {t('actions.delete', { ns: 'common' })}
@@ -829,7 +829,7 @@ export function DictionaryPage(): React.JSX.Element {
                   </div>
                   <div className="px-4 py-3 self-start">
                     <div className="flex flex-col gap-2">
-                      <span className="inline-flex max-w-full items-center gap-2 rounded-md border border-[#252a32] bg-[#0c0d0f] px-2 py-1 text-xs text-neutral-300">
+                      <span className="inline-flex max-w-full items-center gap-2 rounded-md border border-[#2a2f37] bg-[#0c0d0f] px-2 py-1 text-xs text-neutral-300">
                         <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
                         <span className="truncate">
                           {entry.modName || t('table.noMod', { ns: 'dictionary' })}
@@ -854,7 +854,7 @@ export function DictionaryPage(): React.JSX.Element {
                       <button
                         type="button"
                         onClick={() => setEditingEntry(entry)}
-                        className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-transparent text-neutral-400 transition-colors hover:border-[#252a32] hover:bg-[#131518] hover:text-neutral-200"
+                        className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-transparent text-neutral-400 transition-colors hover:border-[#2a2f37] hover:bg-[#131518] hover:text-neutral-200"
                       >
                         <Pencil size={13} />
                       </button>
@@ -884,7 +884,7 @@ export function DictionaryPage(): React.JSX.Element {
           {!loading && displayEntries.length === 0 && (
             <div className="px-6 py-20">
               <div className="flex flex-col items-center gap-3 text-center">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-[#252a32] bg-[#131518] text-neutral-400">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-[#2a2f37] bg-[#131518] text-neutral-400">
                   <BookOpen size={20} />
                 </div>
                 <div className="text-sm font-semibold text-neutral-200">
@@ -923,7 +923,7 @@ export function DictionaryPage(): React.JSX.Element {
               setSelectedIds(new Set())
               setPage((current) => Math.max(1, current - 1))
             }}
-            className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border border-[#252a32] px-2.5 text-neutral-300 transition-colors hover:bg-[#131518] disabled:cursor-not-allowed disabled:opacity-30"
+            className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border border-[#2a2f37] px-2.5 text-neutral-300 transition-colors hover:bg-[#131518] disabled:cursor-not-allowed disabled:opacity-30"
           >
             <ChevronLeft size={12} />
             {t('actions.previous', { ns: 'common' })}
@@ -943,7 +943,7 @@ export function DictionaryPage(): React.JSX.Element {
               setSelectedIds(new Set())
               setPage((current) => Math.min(result.totalPages, current + 1))
             }}
-            className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border border-[#252a32] px-2.5 text-neutral-300 transition-colors hover:bg-[#131518] disabled:cursor-not-allowed disabled:opacity-30"
+            className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border border-[#2a2f37] px-2.5 text-neutral-300 transition-colors hover:bg-[#131518] disabled:cursor-not-allowed disabled:opacity-30"
           >
             {t('actions.next', { ns: 'common' })}
             <ChevronRight size={12} />
@@ -1032,7 +1032,7 @@ function FilterSelect({
       emptyLabel={t('placeholders.noOptionFound', { ns: 'common' })}
       className={className ?? 'w-40'}
       triggerClassName="h-8 bg-[#131518] px-3 text-xs"
-      menuClassName="border-[#303641]"
+      menuClassName="border-[#1f2329]"
       menuMinWidth={menuMinWidth}
     />
   )
@@ -1060,7 +1060,7 @@ function PageSizeSelect({
       options={options}
       className="w-36"
       triggerClassName="h-8 bg-[#131518] px-3 text-xs"
-      menuClassName="border-[#303641]"
+      menuClassName="border-[#1f2329]"
       menuMinWidth={160}
     />
   )

@@ -1,6 +1,6 @@
 appId: com.icosa.bg3-mod-translator
 productName: Icosa
-buildVersion: 1.11.0
+buildVersion: 2.0.0
 copyright: Copyright © 2026 kaironn
 directories:
   buildResources: build
@@ -8,6 +8,8 @@ files:
   - package.json
   - out/**
   - drizzle/**
+  - tools/**
+  - work/pak/**
   - '!**/.vscode/*'
   - '!src/*'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
@@ -15,9 +17,12 @@ files:
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
   - '!bkp/**'
+  - '!work/pak/Localization/English/english.loca'
 asarUnpack:
   - resources/**
   - drizzle/**
+  - tools/**
+  - work/pak/**
   # napi-rs native binding for lz4-napi (pak compression). Its .node lives in a
   # platform-specific package that must sit on the real filesystem - dlopen can't read
   # it from inside app.asar. '**/*.node' also covers any future native dependency.

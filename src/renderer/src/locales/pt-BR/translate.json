@@ -60,6 +60,7 @@
   },
   "grid": {
     "searchPlaceholder": "Buscar em strings...",
+    "exactMatch": "Correspondência exata",
     "all": "Todas",
     "untranslated": "Não traduzidas",
     "translated": "Traduzidas",
@@ -70,6 +71,7 @@
     "translationHeader": "Tradução · {{language}}",
     "emptySource": "vazio",
     "charCount": "{{count}} caracteres",
+    "appearsCount": "Aparece {{count}}x",
     "wordAndCharCount": "{{chars}} caracteres · {{words}} palavras",
     "translationPlaceholder": "Tradução...",
     "startTyping": "Comece a digitar a tradução...",
@@ -104,10 +106,7 @@
   "batchBar": {
     "selectedCount_one": "{{count}} entrada selecionada",
     "selectedCount_other": "{{count}} entradas selecionadas",
-    "chooseAiProvider": "Escolher provedor de IA",
     "translating": "Traduzindo {{completed}} / {{total}}",
-    "rateLimitedWait": "Limite de requisições atingido — aguardando {{seconds}}s para tentar de novo ({{attempt}}/{{max}}). Está demorando mais que o esperado — você pode parar.",
-    "pacingWait": "Espaçando as requisições para respeitar o limite do provedor (próxima em {{seconds}}s). Você pode parar se estiver lento demais.",
     "stop": "Parar",
     "translateWithDeepL": "Traduzir com DeepL",
     "translateWithGoogle": "Traduzir com Google",

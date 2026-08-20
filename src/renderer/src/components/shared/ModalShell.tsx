@@ -51,7 +51,7 @@ export function ModalShell({
         role="dialog"
         aria-modal="true"
         className={cn(
-          'w-full overflow-hidden rounded-xl border border-[#303641] bg-[#131518] shadow-[0_24px_80px_rgba(0,0,0,0.45)]',
+          'w-full overflow-hidden rounded-xl border border-[#1f2329] bg-[#131518] shadow-[0_24px_80px_rgba(0,0,0,0.45)]',
           sizeClassName
         )}
       >

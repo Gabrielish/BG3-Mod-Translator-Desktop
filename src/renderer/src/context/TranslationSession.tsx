@@ -1,4 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer } from 'react'
+import { getReferenceLinks, getReferenceTags, type ReferenceTag } from '@/data/gameReference'
+import {
+  matchesDialogueFilters,
+  matchesDialogueScope,
+  type DialogueFilter,
+  type DialogueScope
+} from '@/data/dialogReference'
 import { i18n } from '@/i18n'
 import type { XmlEntry, XmlLoadProgress } from '@/types'
 
@@ -11,7 +18,12 @@ type Phase = 'idle' | 'loading' | 'loaded'
 export type FilterMode = 'all' | 'untranslated' | 'translated' | 'dictionary' | 'tags'
 export interface FilterSpec {
   mode: FilterMode
+  referenceTag: ReferenceTag | 'all'
+  dialogueFilters: DialogueFilter[]
+  dialogueScope: DialogueScope | null
   search: string
+  exactMatch: boolean
+  linkNameDescription: boolean
 }
 export type SelectionState =
   | { kind: 'explicit'; uids: Set<string> }
@@ -29,14 +41,54 @@ function hasXmlTags(entry: TranslationSessionEntry): boolean {
   return /(<[^>]+>|\{[^}]+\})/.test(entry.source)
 }
 
+export function isDeveloperNote(source: string): boolean {
+  const value = source.trim()
+  return value.startsWith('%%%') || (value.startsWith('|') && value.endsWith('|'))
+}
+
+const searchCache = new WeakMap<TranslationSessionEntry, { source: string; uid: string; uidShort: string }>()
+
+export function entryMatchesSearch(
+  entry: TranslationSessionEntry,
+  query: string,
+  exactMatch: boolean
+): boolean {
+  const normalizedQuery = query.toLowerCase()
+  const cached = searchCache.get(entry)
+  const source = cached?.source ?? entry.source.toLowerCase()
+  const uid = cached?.uid ?? entry.uid.toLowerCase()
+  if (!cached) searchCache.set(entry, { source, uid, uidShort: uid.slice(-9) })
+  const matchesText = (text: string): boolean => exactMatch ? text === normalizedQuery : text.includes(normalizedQuery)
+
+  return (
+    matchesText(source) ||
+    matchesText(entry.target.toLowerCase()) ||
+    matchesText(uid) ||
+    matchesText(cached?.uidShort ?? uid.slice(-9))
+  )
+}
+
 export function entryMatchesFilter(entry: TranslationSessionEntry, filter: FilterSpec): boolean {
   if (filter.mode === 'untranslated' && entry.target.trim()) return false
   if (filter.mode === 'translated' && !entry.target.trim()) return false
   if (filter.mode === 'dictionary' && getCategory(entry) !== 'dictionary') return false
   if (filter.mode === 'tags' && !hasXmlTags(entry)) return false
+  if (filter.referenceTag !== 'all' && !getReferenceTags(entry.source).includes(filter.referenceTag)) {
+    return false
+  }
+  if (!matchesDialogueFilters(entry.source, filter.dialogueFilters)) return false
+  if (!matchesDialogueScope(entry.source, filter.dialogueScope)) return false
   if (filter.search) {
-    const query = filter.search.toLowerCase()
-    return entry.source.toLowerCase().includes(query) || entry.target.toLowerCase().includes(query)
+    if (isDeveloperNote(entry.source)) return false
+    const directMatch = entryMatchesSearch(entry, filter.search, filter.exactMatch)
+    if (directMatch) return true
+    if (filter.linkNameDescription) {
+      const query = filter.search.toLowerCase()
+      return getReferenceLinks(entry.source).some((link) =>
+        filter.exactMatch ? link.text.toLowerCase() === query : link.text.toLowerCase().includes(query)
+      )
+    }
+    return false
   }
   return true
 }
@@ -46,6 +98,8 @@ export interface TranslationSessionState {
   loadingLabel: string
   loadingProgress: XmlLoadProgress | null
   entries: TranslationSessionEntry[]
+  sourceFrequencies: Map<string, number>
+  targetFrequencies: Map<string, number>
   selection: SelectionState
   modName: string
   sourceLang: string
@@ -74,6 +128,7 @@ type Action =
   | { type: 'UPDATE_ENTRY'; rowId: string; target: string }
   | { type: 'MARK_MANUAL'; rowId: string }
   | { type: 'SELECT_ALL_MATCHING'; filter: FilterSpec }
+  | { type: 'SELECT_ROWS'; rowIds: string[] }
   | { type: 'TOGGLE_ENTRY'; rowId: string }
   | { type: 'CLEAR_SELECTION' }
   | { type: 'SET_MOD_NAME'; name: string }
@@ -92,22 +147,48 @@ function reducer(state: TranslationSessionState, action: Action): TranslationSes
       }
     case 'SET_LOADING_PROGRESS':
       return { ...state, loadingProgress: action.progress }
-    case 'SET_ENTRIES':
+    case 'SET_ENTRIES': {
+      const sourceFrequencies = new Map<string, number>()
+      const targetFrequencies = new Map<string, number>()
+      for (const entry of action.entries) {
+        sourceFrequencies.set(entry.source, (sourceFrequencies.get(entry.source) ?? 0) + 1)
+        if (entry.target) {
+          targetFrequencies.set(entry.target, (targetFrequencies.get(entry.target) ?? 0) + 1)
+        }
+      }
       return {
         ...state,
         entries: action.entries,
+        sourceFrequencies,
+        targetFrequencies,
         selection: EMPTY_EXPLICIT,
         phase: 'loaded',
         loadingLabel: '',
         loadingProgress: null
       }
-    case 'UPDATE_ENTRY':
+    }
+    case 'UPDATE_ENTRY': {
+      const currentEntry = state.entries.find((entry) => entry.rowId === action.rowId)
+      if (!currentEntry || currentEntry.target === action.target) return state
+
+      const targetFrequencies = new Map(state.targetFrequencies)
+      if (currentEntry.target) {
+        const previousCount = targetFrequencies.get(currentEntry.target) ?? 0
+        if (previousCount <= 1) targetFrequencies.delete(currentEntry.target)
+        else targetFrequencies.set(currentEntry.target, previousCount - 1)
+      }
+      if (action.target) {
+        targetFrequencies.set(action.target, (targetFrequencies.get(action.target) ?? 0) + 1)
+      }
+
       return {
         ...state,
+        targetFrequencies,
         entries: state.entries.map((e) =>
           e.rowId === action.rowId ? { ...e, target: action.target } : e
         )
       }
+    }
     case 'MARK_MANUAL':
       return {
         ...state,
@@ -120,6 +201,8 @@ function reducer(state: TranslationSessionState, action: Action): TranslationSes
         ...state,
         selection: { kind: 'all-matching', filter: action.filter, excluded: new Set() }
       }
+    case 'SELECT_ROWS':
+      return { ...state, selection: { kind: 'explicit', uids: new Set(action.rowIds) } }
     case 'TOGGLE_ENTRY': {
       const { selection } = state
       if (selection.kind === 'explicit') {
@@ -151,6 +234,8 @@ function reducer(state: TranslationSessionState, action: Action): TranslationSes
         loadingLabel: '',
         loadingProgress: null,
         entries: [],
+        sourceFrequencies: new Map<string, number>(),
+        targetFrequencies: new Map<string, number>(),
         selection: EMPTY_EXPLICIT,
         inputPath: null
       }
@@ -162,6 +247,7 @@ function reducer(state: TranslationSessionState, action: Action): TranslationSes
 interface TranslationSessionContext extends TranslationSessionState {
   // new selection API
   selectAllMatching: (filter: FilterSpec) => void
+  selectRows: (rowIds: string[]) => void
   toggleEntry: (rowId: string) => void
   clearSelection: () => void
   isSelected: (rowId: string) => boolean
@@ -192,7 +278,7 @@ interface TranslationSessionContext extends TranslationSessionState {
 const Context = createContext<TranslationSessionContext | null>(null)
 
 const DEFAULT_SOURCE = 'en'
-const DEFAULT_TARGET = 'pt-BR'
+const DEFAULT_TARGET = 'ro'
 
 export function TranslationSessionProvider({
   children
@@ -204,6 +290,8 @@ export function TranslationSessionProvider({
     loadingLabel: '',
     loadingProgress: null,
     entries: [],
+    sourceFrequencies: new Map<string, number>(),
+    targetFrequencies: new Map<string, number>(),
     selection: EMPTY_EXPLICIT,
     modName: '',
     sourceLang: DEFAULT_SOURCE,
@@ -214,7 +302,12 @@ export function TranslationSessionProvider({
   useEffect(() => {
     window.api.config.getAll().then((cfg) => {
       if (cfg.last_source_lang) dispatch({ type: 'SET_SOURCE_LANG', lang: cfg.last_source_lang })
-      if (cfg.last_target_lang) dispatch({ type: 'SET_TARGET_LANG', lang: cfg.last_target_lang })
+      if (cfg.last_target_lang === 'pt-BR') {
+        dispatch({ type: 'SET_TARGET_LANG', lang: DEFAULT_TARGET })
+        void window.api.config.set({ key: 'last_target_lang', value: DEFAULT_TARGET })
+      } else if (cfg.last_target_lang) {
+        dispatch({ type: 'SET_TARGET_LANG', lang: cfg.last_target_lang })
+      }
     })
   }, [])
 
@@ -285,6 +378,10 @@ export function TranslationSessionProvider({
 
   const selectAllMatching = useCallback((filter: FilterSpec) => {
     dispatch({ type: 'SELECT_ALL_MATCHING', filter })
+  }, [])
+
+  const selectRows = useCallback((rowIds: string[]) => {
+    dispatch({ type: 'SELECT_ROWS', rowIds })
   }, [])
 
   const toggleEntry = useCallback((rowId: string) => {
@@ -370,6 +467,7 @@ export function TranslationSessionProvider({
       value={{
         ...state,
         selectAllMatching,
+        selectRows,
         toggleEntry,
         clearSelection,
         isSelected,

@@ -146,7 +146,7 @@ export function DictionaryImportModal({
         <button
           type="button"
           onClick={handleSelectFile}
-          className="flex min-h-36 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-[#3a404a] bg-[#0f1114] px-6 py-6 text-center transition-colors hover:border-amber-500 hover:bg-amber-500/6"
+          className="flex min-h-36 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-[#2a2f37] bg-[#0f1114] px-6 py-6 text-center transition-colors hover:border-amber-500 hover:bg-amber-500/6"
         >
           <Upload size={18} className="text-neutral-300" />
           <div className="text-sm font-semibold text-neutral-100">

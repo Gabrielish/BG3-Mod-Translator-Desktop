@@ -1,6 +1,6 @@
 {
   "name": "icosa",
-  "version": "1.11.0",
+  "version": "2.0.0",
   "private": true,
   "description": "Desktop translator for Baldur's Gate 3 mod localization.",
   "main": "./out/main/index.js",
@@ -17,6 +17,7 @@
     "url": "https://github.com/Kaironn2/BG3-Mod-Translator-Desktop/issues"
   },
   "scripts": {
+    "build:dialog-index": "node scripts/build-dialog-index.mjs",
     "format": "biome format --write .",
     "lint": "biome check .",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
@@ -24,7 +25,7 @@
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
-    "build": "npm run typecheck && electron-vite build",
+    "build": "npm run build:dialog-index && npm run typecheck && electron-vite build",
     "postinstall": "electron-builder install-app-deps",
     "build:unpack": "npm run build && electron-builder --dir",
     "build:win": "npm run build && electron-builder --win",

@@ -7,6 +7,7 @@ import { closeDb, getDb } from './database/connection'
 import { createRepositoryRegistry } from './database/repositories/registry'
 import { registerConfigHandlers } from './ipc/config.ipc'
 import { registerDictionaryHandlers } from './ipc/dictionary.ipc'
+import { registerDialogueHandlers } from './ipc/dialogue.ipc'
 import { registerFsHandlers } from './ipc/fs.ipc'
 import { registerLanguageHandlers } from './ipc/language.ipc'
 import { registerLogHandlers } from './ipc/log.ipc'
@@ -47,7 +48,8 @@ function createWindow(): void {
     icon: process.platform === 'win32' ? iconWin : icon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      sandbox: false,
+      webviewTag: true
     }
   })
 
@@ -86,6 +88,7 @@ app.whenReady().then(() => {
   registerWindowHandlers(getWindow)
   registerTranslationHandlers(getWindow, repos, usageService)
   registerDictionaryHandlers(repos)
+  registerDialogueHandlers(getWindow)
   registerLanguageHandlers(repos)
   registerLogHandlers()
   registerModHandlers(repos)

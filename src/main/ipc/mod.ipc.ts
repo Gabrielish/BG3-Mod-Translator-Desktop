@@ -9,6 +9,7 @@ import {
   completeTranslationImport as completeImport,
   discardTranslationInput,
   exportTranslatedPackage,
+  exportLocalizationPak,
   getMetaForMod,
   getStoredModDir,
   prepareTranslationInput,
@@ -118,6 +119,12 @@ export function registerModHandlers(repos: RepositoryRegistry): void {
         bg3LanguageFolder: string
       }
     ) => exportTranslatedPackage(repos, params)
+  )
+
+  ipcMain.handle(
+    'mod:exportLocalizationPak',
+    (_event, params: { outputPath: string; entries: { uid: string; version: string; source: string; target: string }[] }) =>
+      exportLocalizationPak(params.entries, params.outputPath)
   )
 
   ipcMain.handle('mod:getAll', (_event, params?: { lang1?: string; lang2?: string }) => {

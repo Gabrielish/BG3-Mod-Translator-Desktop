@@ -105,7 +105,7 @@ export function DictionaryReplaceModal({
               autoFocus
               value={draft.find}
               onChange={(event) => setDraft({ ...draft, find: event.target.value })}
-              className="h-10 w-full rounded-md border border-[#252a32] bg-[#0c0d0f] px-3 text-sm text-neutral-200 outline-none transition-colors placeholder:text-neutral-600 focus:border-amber-500"
+              className="h-10 w-full rounded-md border border-[#2a2f37] bg-[#0c0d0f] px-3 text-sm text-neutral-200 outline-none transition-colors placeholder:text-neutral-600 focus:border-amber-500"
               placeholder={t('replaceModal.findPlaceholder', { ns: 'dictionary' })}
             />
           </Field>
@@ -114,7 +114,7 @@ export function DictionaryReplaceModal({
             <input
               value={draft.replaceWith}
               onChange={(event) => setDraft({ ...draft, replaceWith: event.target.value })}
-              className="h-10 w-full rounded-md border border-[#252a32] bg-[#0c0d0f] px-3 text-sm text-neutral-200 outline-none transition-colors placeholder:text-neutral-600 focus:border-amber-500"
+              className="h-10 w-full rounded-md border border-[#2a2f37] bg-[#0c0d0f] px-3 text-sm text-neutral-200 outline-none transition-colors placeholder:text-neutral-600 focus:border-amber-500"
               placeholder={t('replaceModal.replacePlaceholder', { ns: 'dictionary' })}
             />
           </Field>
@@ -205,7 +205,7 @@ function ScopeButton({
         'inline-flex h-10 cursor-pointer items-center justify-center rounded-md border text-sm transition-colors',
         active
           ? 'border-amber-500 bg-amber-500/10 text-amber-400'
-          : 'border-[#252a32] bg-[#0c0d0f] text-neutral-300 hover:border-neutral-600 hover:bg-[#131518]'
+          : 'border-[#2a2f37] bg-[#0c0d0f] text-neutral-300 hover:border-neutral-600 hover:bg-[#131518]'
       )}
     >
       {label}
@@ -223,7 +223,7 @@ function CheckField({
   onChange: (checked: boolean) => void
 }): React.JSX.Element {
   return (
-    <label className="flex cursor-pointer items-center gap-2 rounded-md border border-[#252a32] bg-[#0c0d0f] px-3 py-2 text-sm text-neutral-200">
+    <label className="flex cursor-pointer items-center gap-2 rounded-md border border-[#2a2f37] bg-[#0c0d0f] px-3 py-2 text-sm text-neutral-200">
       <input
         type="checkbox"
         checked={checked}

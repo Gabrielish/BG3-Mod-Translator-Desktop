@@ -1,4 +1,4 @@
-import { Download } from 'lucide-react'
+import { Archive, Download } from 'lucide-react'
 import { useAppTranslation } from '@/i18n/useAppTranslation'
 import { ThemedSelect } from '@/components/shared/ThemedSelect'
 import type { ExportFormat } from '../types'
@@ -28,12 +28,14 @@ interface ExportControlsProps {
   exportFormat: ExportFormat
   onFormatChange: (format: ExportFormat) => void
   onExport: () => Promise<void>
+  onPakExport: () => Promise<void>
 }
 
 export function ExportControls({
   exportFormat,
   onFormatChange,
-  onExport
+  onExport,
+  onPakExport
 }: ExportControlsProps): React.JSX.Element {
   const { t } = useAppTranslation(['translate', 'common'])
 
@@ -52,6 +54,15 @@ export function ExportControls({
           { value: 'zip', label: 'zip' }
         ]}
       />
+      <button
+        type="button"
+        className={btnPrimary}
+        onClick={onPakExport}
+        title="Create English.pak"
+      >
+        <Archive />
+        PAK
+      </button>
       <button
         type="button"
         className={btnPrimary}

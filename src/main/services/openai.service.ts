@@ -55,7 +55,7 @@ export async function translateText(
     signal,
     body: JSON.stringify({
       model,
-      ...(/^(gpt-5|o[1-9])/i.test(model) ? {} : { temperature: 0.3 }),
+      temperature: 0.3,
       max_tokens: 4000,
       messages: [
         { role: 'system', content: buildSystemPrompt(sourceLang, targetLang) },

@@ -10,7 +10,7 @@ import type { Language } from '@/types'
 import { EMPTY_ENTRY_DRAFT, type EntryDraft } from './types'
 
 const META_INPUT =
-  'h-9 w-full rounded-md border border-[#252a32] bg-[#0c0d0f] px-3 text-sm text-neutral-200 outline-none transition-colors placeholder:text-neutral-600 focus:border-amber-500'
+  'h-9 w-full rounded-md border border-[#2a2f37] bg-[#0c0d0f] px-3 text-sm text-neutral-200 outline-none transition-colors placeholder:text-neutral-600 focus:border-amber-500'
 
 interface DictionaryEntryModalProps {
   open: boolean

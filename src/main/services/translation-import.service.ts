@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto'
+import { execFile } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
+import { promisify } from 'node:util'
 import { eq } from 'drizzle-orm'
 import { app } from 'electron'
 import type { RepositoryRegistry } from '../database/repositories/registry'
@@ -67,6 +69,77 @@ interface StagedImport {
 }
 
 const stagedImports = new Map<string, StagedImport>()
+const execFileAsync = promisify(execFile)
+
+function bundledAssetPath(relativePath: string): string {
+  if (!app.isPackaged) return path.join(app.getAppPath(), relativePath)
+
+  const unpackedPath = path.join(process.resourcesPath, 'app.asar.unpacked', relativePath)
+  return fs.existsSync(unpackedPath)
+    ? unpackedPath
+    : path.join(process.resourcesPath, relativePath)
+}
+
+async function runDivine(args: string[]): Promise<void> {
+  const divinePath = bundledAssetPath(path.join('tools', 'lslib', 'Tools', 'Divine.exe'))
+  if (!fs.existsSync(divinePath)) {
+    throw new Error(`Divine.exe was not found at ${divinePath}`)
+  }
+
+  try {
+    await execFileAsync(divinePath, args, {
+      cwd: path.dirname(divinePath),
+      windowsHide: true,
+      maxBuffer: 20 * 1024 * 1024
+    })
+  } catch (error) {
+    const details = error as { stderr?: string; stdout?: string; message?: string }
+    throw new Error(
+      `Divine failed: ${details.stderr?.trim() || details.stdout?.trim() || details.message || 'unknown error'}`
+    )
+  }
+}
+
+export async function exportLocalizationPak(
+  entries: ExportPackageEntry[],
+  outputPath: string
+): Promise<{ outputPath: string }> {
+  const templateRoot = bundledAssetPath(path.join('work', 'pak'))
+  if (!fs.existsSync(templateRoot)) {
+    throw new Error(`PAK template was not found at ${templateRoot}`)
+  }
+
+  const tempDir = createTempDir('icosa_pak_export')
+  const packageRoot = path.join(tempDir, 'pak')
+  const languageDir = path.join(packageRoot, 'Localization', 'English')
+  const xmlPath = path.join(languageDir, 'english.xml')
+  const locaPath = path.join(languageDir, 'english.loca')
+
+  try {
+    fs.cpSync(templateRoot, packageRoot, { recursive: true })
+    fs.mkdirSync(languageDir, { recursive: true })
+
+    writeLocalizationXml(
+      entries.map((entry) => ({
+        contentuid: entry.uid,
+        version: entry.version,
+        text: encodeEntities(entry.target || entry.source)
+      })),
+      xmlPath
+    )
+
+    await runDivine(['-g', 'bg3', '-s', xmlPath, '-d', locaPath, '-a', 'convert-loca'])
+    if (!fs.existsSync(locaPath)) throw new Error('Divine did not create english.loca')
+    fs.rmSync(xmlPath, { force: true })
+    fs.mkdirSync(path.dirname(outputPath), { recursive: true })
+    await runDivine(['-g', 'bg3', '-s', packageRoot, '-d', outputPath, '-a', 'create-package'])
+    if (!fs.existsSync(outputPath)) throw new Error('Divine did not create the PAK file')
+
+    return { outputPath }
+  } finally {
+    cleanupTempDir(tempDir)
+  }
+}
 
 export async function prepareTranslationInput(
   inputPath: string

@@ -14,17 +14,13 @@ import type { AiSimilarityExample } from '../../../preload/api-types'
 //   radius of a failed request small; context windows (>=128k) are never the limit.
 // - maxLines 20 bounds alignment errors - models start misnumbering very large groups.
 // A single line that exceeds the budgets on its own becomes a group of 1.
-export interface GroupLimits {
-  maxLines: number
-  maxInputTokens: number
-  maxOutputTokens: number
-}
-
-export const GROUP_LIMITS: GroupLimits = {
+export const GROUP_LIMITS = {
   maxLines: 20,
   maxInputTokens: 10_000,
   maxOutputTokens: 4_000
-}
+} as const
+
+export type GroupLimits = typeof GROUP_LIMITS
 
 // max_tokens sent to providers that require one (Anthropic) for grouped requests:
 // 2x headroom over the output budget above.

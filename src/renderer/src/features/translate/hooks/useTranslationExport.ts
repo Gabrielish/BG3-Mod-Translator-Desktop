@@ -31,6 +31,21 @@ export function useTranslationExport(session: TranslationSession, languages: Lan
     }
   }, [entries, modName, t, targetLang])
 
+  const exportPak = useCallback(async () => {
+    const outputPath = await window.api.fs.saveDialog({
+      defaultName: 'English.pak',
+      filters: [{ name: 'PAK', extensions: ['pak'] }]
+    })
+    if (!outputPath) return
+
+    try {
+      await window.api.mod.exportLocalizationPak({ outputPath, entries })
+      toast.success(t('translate.packageExported', { ns: 'toasts', format: 'PAK' }))
+    } catch (err) {
+      toast.error(getLocalizedErrorMessage(err, t))
+    }
+  }, [entries, t])
+
   const openExport = useCallback(async () => {
     if (exportFormat === 'xml') {
       await exportXml()
@@ -90,6 +105,7 @@ export function useTranslationExport(session: TranslationSession, languages: Lan
 
   return {
     isExporting,
+    exportPak,
     exportFormat,
     exportMeta,
     bg3LanguageFolder,

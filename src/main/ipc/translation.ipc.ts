@@ -9,23 +9,15 @@ import type {
   ConfigKey,
   TranslationProvider
 } from '../../preload/api-types'
-import { AI_TUNING_RANGE, DEFAULT_AI_TUNING } from '../../preload/api-types'
 import { getDb } from '../database/connection'
 import type { RepositoryRegistry } from '../database/repositories/registry'
 import { config } from '../database/schema'
 import type { AiPipelineSimilarity } from '../pipelines/ai.pipeline'
 import type { PipelineOptions } from '../pipelines/base.pipeline'
 import { aiTranslate, aiTranslateGroup } from '../services/ai/ai-translate.service'
-import { estimateTokens, GROUP_LIMITS, packEntriesIntoGroups } from '../services/ai/batch-grouping'
+import { estimateTokens, packEntriesIntoGroups } from '../services/ai/batch-grouping'
 import { filterExamples } from '../services/ai/prompt-builder'
-import { getProviderRateLimit } from '../services/ai/provider-limits'
 import { isAiProvider, PROVIDER_CONFIG } from '../services/ai/provider-registry'
-import {
-  isAiLimitError,
-  type RateLimitWaitInfo,
-  setRateLimitWaitHandler,
-  setRuntimeProviderLimits
-} from '../services/ai/rate-limit'
 import {
   translateText as translateDeepL,
   translateBatchDetailed as translateDeepLBatch
@@ -374,20 +366,11 @@ function resolveActiveProvider(): AiProviderId {
   return raw && isAiProvider(raw) ? raw : 'gemini'
 }
 
-const DEV_ENV_KEYS: Partial<Record<AiProviderId, string>> = {
-  openai: 'OPENAI_API_KEY',
-  gemini: 'GEMINI_API_KEY',
-  anthropic: 'ANTHROPIC_API_KEY',
-  grok: 'XAI_API_KEY',
-  zai: 'ZAI_API_KEY'
-}
-
 function resolveApiKey(providerId: AiProviderId): string {
   let key = readConfigValue(PROVIDER_CONFIG[providerId].keyConfigName)
-  // Dev convenience: fall back to the matching .env key so testing works without Settings.
-  if (!key && is.dev) {
-    const envName = DEV_ENV_KEYS[providerId]
-    key = (envName ? process.env[envName]?.trim() : '') || null
+  // Dev convenience: fall back to the GEMINI_API_KEY in .env so testing works out of the box.
+  if (!key && providerId === 'gemini' && is.dev) {
+    key = process.env.GEMINI_API_KEY?.trim() || null
   }
   if (!key) {
     throw new Error(`${PROVIDER_CONFIG[providerId].label} API key not configured. Go to Settings.`)
@@ -415,25 +398,6 @@ function resolveActiveTemplate(repos: RepositoryRegistry): string {
   const fallback = repos.promptSlot.getDefault()
   if (!fallback) throw new Error('No default prompt configured')
   return fallback.prompt
-}
-
-function resolveProviderTuning(providerId: AiProviderId, model: string) {
-  const base = getProviderRateLimit(providerId, model)
-  const defaults = DEFAULT_AI_TUNING[providerId]
-  const concurrency = clamp(
-    Number.parseInt(readConfigValue(`${providerId}_concurrency`) ?? '', 10) || defaults.concurrency,
-    AI_TUNING_RANGE.concurrency.min,
-    AI_TUNING_RANGE.concurrency.max
-  )
-  const batchLines = clamp(
-    Number.parseInt(readConfigValue(`${providerId}_batch_lines`) ?? '', 10) || defaults.batchLines,
-    AI_TUNING_RANGE.batchLines.min,
-    AI_TUNING_RANGE.batchLines.max
-  )
-  return {
-    rateLimit: { ...base, maxConcurrent: concurrency },
-    batchLines
-  }
 }
 
 function resolveSimilarity(): AiPipelineSimilarity {
@@ -538,20 +502,14 @@ async function runAiBatchJob(ctx: AiBatchJobContext, repos: RepositoryRegistry):
     // instead of once per line (~95% less template overhead, ~15-20x fewer requests).
     // See services/ai/batch-grouping.ts for the budget rationale.
     const templateOverhead = estimateTokens(template) + 200 // + format/examples headings
-    const tuning = resolveProviderTuning(providerId, model)
-    const groups = packEntriesIntoGroups(pendingEntries, examplesByUid, templateOverhead, {
-      ...GROUP_LIMITS,
-      maxLines: tuning.batchLines
-    })
+    const groups = packEntriesIntoGroups(pendingEntries, examplesByUid, templateOverhead)
 
-    setRuntimeProviderLimits(providerId, { maxConcurrent: tuning.rateLimit.maxConcurrent })
-    setRateLimitWaitHandler((info: RateLimitWaitInfo) => {
-      emitBatchWaiting(ctx.getWindow, { jobId: ctx.jobId, ...info })
-    })
-
+    // Modest concurrency: LLM APIs enforce requests-per-minute quotas (free tiers are tight),
+    // so avoid the burst a wide pool would cause. 429s additionally trigger a shared
+    // cooldown + retry inside the provider adapters (see services/ai/rate-limit.ts).
     await runConcurrent(
       groups,
-      tuning.rateLimit.maxConcurrent,
+      3,
       async (group) => {
         throwIfAborted(ctx.signal)
         let missedUids: string[]
@@ -581,6 +539,8 @@ async function runAiBatchJob(ctx: AiBatchJobContext, repos: RepositoryRegistry):
           }
         } catch (err) {
           if (isAbortError(err) || ctx.signal.aborted) throw err
+          // Whole group request failed (e.g. retries exhausted) - retry each line alone so
+          // one bad request can't take the entire group down.
           logError('translation.batch.ai.group', err, {
             jobId: ctx.jobId,
             provider: providerId,
@@ -588,12 +548,6 @@ async function runAiBatchJob(ctx: AiBatchJobContext, repos: RepositoryRegistry):
             sourceLang: ctx.sourceLang,
             targetLang: ctx.targetLang
           })
-          // A rate-limit/quota failure already exhausted retries. Falling back to
-          // per-line requests would multiply 429s — fail the group and stop the job.
-          if (isAiLimitError(err)) {
-            for (const entry of group.entries) emitLineFailed(entry.uid, err)
-            throw err
-          }
           missedUids = group.entries.map((entry) => entry.uid)
         }
 
@@ -625,7 +579,6 @@ async function runAiBatchJob(ctx: AiBatchJobContext, repos: RepositoryRegistry):
               sourceLang: ctx.sourceLang,
               targetLang: ctx.targetLang
             })
-            if (isAiLimitError(err)) throw err
           }
         }
       },
@@ -652,25 +605,10 @@ async function runAiBatchJob(ctx: AiBatchJobContext, repos: RepositoryRegistry):
       targetLang: ctx.targetLang,
       total: ctx.entries.length
     })
-    if (isAiLimitError(err)) {
-      summary.failed = summary.total - summary.translated
-      if (summary.translated > 0) {
-        emitBatchDone(ctx.getWindow, { jobId: ctx.jobId, ...summary, cancelled: false })
-      } else {
-        emitBatchError(ctx.getWindow, {
-          jobId: ctx.jobId,
-          message: err instanceof Error ? err.message : String(err)
-        })
-      }
-      return
-    }
     emitBatchError(ctx.getWindow, {
       jobId: ctx.jobId,
       message: err instanceof Error ? err.message : String(err)
     })
-  } finally {
-    setRateLimitWaitHandler(null)
-    setRuntimeProviderLimits(providerId, null)
   }
 }
 
@@ -1071,16 +1009,6 @@ function emitBatchError(
   const win = getActiveWindow(getWindow)
   if (win) {
     win.webContents.send('translation:batchError', payload)
-  }
-}
-
-function emitBatchWaiting(
-  getWindow: () => BrowserWindow | null,
-  payload: { jobId: string } & RateLimitWaitInfo
-): void {
-  const win = getActiveWindow(getWindow)
-  if (win) {
-    win.webContents.send('translation:batchWaiting', payload)
   }
 }
 

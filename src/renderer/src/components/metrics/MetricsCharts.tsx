@@ -115,7 +115,7 @@ export function MetricsCharts({
               tickFormatter={(v: string) => v.slice(5)}
             />
             <YAxis tick={{ fontSize: 10, fill: '#71717a' }} tickLine={false} axisLine={false} />
-            <Tooltip contentStyle={CHART_TOOLTIP_STYLE} cursor={{ stroke: '#303641' }} />
+            <Tooltip contentStyle={CHART_TOOLTIP_STYLE} cursor={{ stroke: '#1f2329' }} />
             <Line
               type="monotone"
               dataKey="chars"
@@ -140,7 +140,7 @@ export function MetricsCharts({
               tickFormatter={(v: string) => v.slice(5)}
             />
             <YAxis tick={{ fontSize: 10, fill: '#71717a' }} tickLine={false} axisLine={false} />
-            <Tooltip contentStyle={CHART_TOOLTIP_STYLE} cursor={{ stroke: '#303641' }} />
+            <Tooltip contentStyle={CHART_TOOLTIP_STYLE} cursor={{ stroke: '#1f2329' }} />
             <Line
               type="monotone"
               dataKey="entries"

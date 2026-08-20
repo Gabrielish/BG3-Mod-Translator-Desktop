@@ -5,6 +5,7 @@
     "apiKeys": "Chaves de API",
     "defaults": "Padrões de projeto",
     "language": "Preferências do aplicativo",
+    "interface": "Interface",
     "tools": "Ferramentas externas",
     "debugLogs": "Logs de depuração"
   },
@@ -15,10 +16,12 @@
     "defaultSourceLanguage": "Idioma de origem padrão",
     "defaultTargetLanguage": "Idioma de destino padrão",
     "appLanguage": "Idioma do aplicativo",
+    "showCounters": "Mostrar contadores de tradução",
     "divinePath": "Caminho do Divine.exe"
   },
   "descriptions": {
-    "divinePath": "Deixe em branco para usar o padrão do sistema."
+    "divinePath": "Deixe em branco para usar o padrão do sistema.",
+    "showCounters": "Mostra os totais de strings e caracteres selecionados e a contagem de caracteres em cada entrada."
   },
   "placeholders": {
     "author": "Seu nome",

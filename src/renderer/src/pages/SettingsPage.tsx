@@ -203,6 +203,23 @@ export function SettingsPage(): React.JSX.Element {
           </div>
         </SettingsCard>
 
+        <SettingsCard title={t('sections.interface')}>
+          <label className="flex cursor-pointer items-start gap-3">
+            <input
+              type="checkbox"
+              checked={config['show_translation_counters'] === 'true'}
+              onChange={(event) => {
+                void set('show_translation_counters', String(event.target.checked))
+              }}
+              className="mt-0.5 cursor-pointer accent-amber-500"
+            />
+            <span className="flex flex-col gap-1">
+              <span className="text-sm font-medium text-neutral-300">{t('fields.showCounters')}</span>
+              <span className="text-xs text-neutral-500">{t('descriptions.showCounters')}</span>
+            </span>
+          </label>
+        </SettingsCard>
+
         <SettingsCard title={t('sections.defaults')}>
           <div className="space-y-5">
             <SettingField

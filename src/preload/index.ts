@@ -9,7 +9,6 @@ import type {
   TranslationBatchDoneEvent,
   TranslationBatchErrorEvent,
   TranslationBatchProgressEvent,
-  TranslationBatchWaitingEvent,
   TranslationStartPayload,
   UnsubscribeFn
 } from './api-types'
@@ -64,10 +63,7 @@ const api: AppApi = {
       on('translation:batchDone', cb),
 
     onBatchError: (cb: (data: TranslationBatchErrorEvent) => void): UnsubscribeFn =>
-      on('translation:batchError', cb),
-
-    onBatchWaiting: (cb: (data: TranslationBatchWaitingEvent) => void): UnsubscribeFn =>
-      on('translation:batchWaiting', cb)
+      on('translation:batchError', cb)
   },
 
   dictionary: {
@@ -264,6 +260,12 @@ const api: AppApi = {
     }): Promise<{ outputPath: string }> =>
       ipcRenderer.invoke('mod:exportTranslatedPackage', params),
 
+    exportLocalizationPak: (params: {
+      outputPath: string
+      entries: { uid: string; version: string; source: string; target: string }[]
+    }): Promise<{ outputPath: string }> =>
+      ipcRenderer.invoke('mod:exportLocalizationPak', params),
+
     delete: (params: { modName: string }) => ipcRenderer.invoke('mod:delete', params),
 
     previewDelete: (params: { modName: string }) => ipcRenderer.invoke('mod:previewDelete', params),
@@ -362,6 +364,10 @@ const api: AppApi = {
     isMaximized: (): Promise<boolean> => ipcRenderer.invoke('window:isMaximized'),
     onMaximizeChange: (cb: (isMaximized: boolean) => void): UnsubscribeFn =>
       on('window:maximizeChange', cb)
+  },
+
+  dialogue: {
+    open: (dialogueName: string): Promise<void> => ipcRenderer.invoke('dialogue:open', dialogueName)
   },
 
   fs: {

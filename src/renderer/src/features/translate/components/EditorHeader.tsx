@@ -41,6 +41,7 @@ interface EditorHeaderProps {
   onSave: () => Promise<void>
   onExportFormatChange: (format: ExportFormat) => void
   onExport: () => Promise<void>
+  onPakExport: () => Promise<void>
 }
 
 export function EditorHeader({
@@ -59,7 +60,8 @@ export function EditorHeader({
   onViewModeChange,
   onSave,
   onExportFormatChange,
-  onExport
+  onExport,
+  onPakExport
 }: EditorHeaderProps): React.JSX.Element {
   const { t } = useAppTranslation(['translate', 'common'])
 
@@ -136,6 +138,7 @@ export function EditorHeader({
             exportFormat={exportFormat}
             onFormatChange={onExportFormatChange}
             onExport={onExport}
+            onPakExport={onPakExport}
           />
         </div>
       </div>

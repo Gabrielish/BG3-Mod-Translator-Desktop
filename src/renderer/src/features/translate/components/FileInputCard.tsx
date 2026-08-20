@@ -46,7 +46,7 @@ export function FileInputCard({
             ? 'p-3.5 border-amber-500 bg-[#0f1114]'
             : isDragging
               ? 'p-8 border-dashed border-amber-500 bg-amber-400/5'
-              : 'p-8 border-dashed border-[#2a2f38] bg-[#0f1114]'
+              : 'p-8 border-dashed border-[#2a2f37] bg-[#0f1114]'
         )}
       >
         {!fileName ? (

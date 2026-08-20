@@ -9,7 +9,6 @@
     "apiKeyMissing": "A chave de API do provedor não está configurada. Vá em Configurações.",
     "apiKeyRequired": "A chave de API do provedor é obrigatória.",
     "aiRateLimited": "O limite de requisições do provedor de IA foi atingido. Aguarde um momento e tente novamente — os detalhes completos estão nos logs da aplicação.",
-    "aiQuotaExhausted": "A cota deste provedor de IA acabou (diária ou de faturamento). A tradução parou — tente mais tarde ou troque de provedor. Os detalhes completos estão nos logs da aplicação.",
     "invalidProvider": "Provedor de tradução desconhecido.",
     "noValidXml": "Nenhum XML válido foi encontrado no arquivo selecionado.",
     "invalidFormat": "Formato de entrada inválido.",

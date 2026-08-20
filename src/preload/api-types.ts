@@ -1,23 +1,8 @@
 import type { ElectronAPI } from '@electron-toolkit/preload'
 
 export type UnsubscribeFn = () => void
-export type AiProviderId = 'openai' | 'anthropic' | 'gemini' | 'grok' | 'zai'
+export type AiProviderId = 'openai' | 'anthropic' | 'gemini' | 'grok'
 export type TranslationProvider = AiProviderId | 'deepl' | 'google' | 'manual'
-
-// Paid-tier defaults for batch pacing. Gemini stays on the free-tier floor.
-export const AI_TUNING_RANGE = {
-  concurrency: { min: 1, max: 20 },
-  batchLines: { min: 1, max: 100 }
-} as const
-
-export const DEFAULT_AI_TUNING: Record<AiProviderId, { concurrency: number; batchLines: number }> =
-  {
-    openai: { concurrency: 3, batchLines: 20 },
-    anthropic: { concurrency: 3, batchLines: 20 },
-    grok: { concurrency: 3, batchLines: 20 },
-    zai: { concurrency: 2, batchLines: 20 },
-    gemini: { concurrency: 1, batchLines: 8 }
-  }
 
 // The four variables every translation prompt must contain. Highlighted in the editor and
 // validated before a prompt slot can be saved (shared by main + renderer).
@@ -116,17 +101,6 @@ export interface TranslationBatchDoneEvent {
 export interface TranslationBatchErrorEvent {
   jobId: string
   message: string
-}
-
-export type TranslationBatchWaitingReason = 'pace' | 'retry' | 'cooldown'
-
-export interface TranslationBatchWaitingEvent {
-  jobId: string
-  providerId: string
-  delayMs: number
-  attempt: number
-  maxAttempts: number
-  reason: TranslationBatchWaitingReason
 }
 
 export interface LogPayload {
@@ -240,22 +214,10 @@ export type ConfigKey =
   | 'anthropic_key'
   | 'gemini_key'
   | 'grok_key'
-  | 'zai_key'
   | 'openai_model'
   | 'anthropic_model'
   | 'gemini_model'
   | 'grok_model'
-  | 'zai_model'
-  | 'openai_concurrency'
-  | 'anthropic_concurrency'
-  | 'gemini_concurrency'
-  | 'grok_concurrency'
-  | 'zai_concurrency'
-  | 'openai_batch_lines'
-  | 'anthropic_batch_lines'
-  | 'gemini_batch_lines'
-  | 'grok_batch_lines'
-  | 'zai_batch_lines'
   | 'ai_provider'
   | 'ai_active_prompt_slot'
   | 'ai_similarity_enabled'
@@ -266,6 +228,7 @@ export type ConfigKey =
   | 'app_language'
   | 'author'
   | 'dictionary_page_size'
+  | 'show_translation_counters'
   | 'divine_path'
 
 export type UserErrorCode =
@@ -276,7 +239,6 @@ export type UserErrorCode =
   | 'translation.apiKeyMissing'
   | 'translation.apiKeyRequired'
   | 'translation.aiRateLimited'
-  | 'translation.aiQuotaExhausted'
   | 'translation.invalidProvider'
   | 'translation.noValidXml'
   | 'translation.invalidFormat'
@@ -358,7 +320,6 @@ export interface TranslationApi {
   onBatchProgress(cb: (data: TranslationBatchProgressEvent) => void): UnsubscribeFn
   onBatchDone(cb: (data: TranslationBatchDoneEvent) => void): UnsubscribeFn
   onBatchError(cb: (data: TranslationBatchErrorEvent) => void): UnsubscribeFn
-  onBatchWaiting(cb: (data: TranslationBatchWaitingEvent) => void): UnsubscribeFn
 }
 
 export type DictionaryImportProgressUpdate =
@@ -437,6 +398,10 @@ export interface ModApi {
     entries: XmlEntry[]
     meta: ModMeta
     bg3LanguageFolder: string
+  }): Promise<{ outputPath: string }>
+  exportLocalizationPak(params: {
+    outputPath: string
+    entries: XmlEntry[]
   }): Promise<{ outputPath: string }>
   delete(params: { modName: string }): Promise<DeleteModResult>
   previewDelete(params: { modName: string }): Promise<DeleteModPreview>
@@ -537,6 +502,10 @@ export interface WindowApi {
   onMaximizeChange(cb: (isMaximized: boolean) => void): UnsubscribeFn
 }
 
+export interface DialogueApi {
+  open(dialogueName: string): Promise<void>
+}
+
 export interface FsApi {
   openDialog(params?: { filters?: Electron.FileFilter[]; multiple?: boolean }): Promise<string[]>
   saveDialog(params?: {
@@ -631,6 +600,7 @@ export interface AppApi {
   merge: MergeApi
   window: WindowApi
   metrics: MetricsApi
+  dialogue: DialogueApi
 }
 
 export interface AppWindow {

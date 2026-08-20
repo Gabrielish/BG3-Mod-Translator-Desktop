@@ -8,36 +8,7 @@
     "showKey": "Mostrar",
     "hideKey": "Ocultar",
     "autoSaved": "As alterações são salvas automaticamente",
-    "activeHint": "Botão de tradução ativo: {{provider}} · {{model}}",
-    "expand": "Mostrar limites de lote e dicas",
-    "collapse": "Ocultar limites de lote e dicas",
-    "concurrency": "Requisições simultâneas",
-    "batchLines": "Linhas por requisição",
-    "tips": {
-      "title": "Limites",
-      "free": "Grátis",
-      "paid": "Pago",
-      "openai": {
-        "free": "1 requisição simultânea, 5–10 linhas",
-        "paid": "3–5 simultâneas, 20 linhas (padrão). Valores altos demais geram 429."
-      },
-      "anthropic": {
-        "free": "Contas novas: comece com 1–2 simultâneas",
-        "paid": "3–4 simultâneas, 20 linhas (padrão)"
-      },
-      "gemini": {
-        "free": "1 simultânea, 8 linhas (Flash ~10 RPM, Pro ~5). O padrão fica aqui para evitar loop de 429.",
-        "paid": "3 simultâneas, 20 linhas"
-      },
-      "grok": {
-        "free": "Não há API grátis pública",
-        "paid": "3 simultâneas, 20 linhas (padrão). Reduza a concorrência se aparecer 429."
-      },
-      "zai": {
-        "free": "Coding Plan Lite: 1 simultânea",
-        "paid": "Pro/Max: 2 simultâneas, 20 linhas (padrão)"
-      }
-    }
+    "activeHint": "Botão de tradução ativo: {{provider}} · {{model}}"
   },
   "slots": {
     "title": "Prompt de tradução",
